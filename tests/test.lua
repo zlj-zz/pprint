@@ -22,8 +22,16 @@ end
 --end)
 
 function test()
+    local a_list = {
+        '1', '2', '3\n4'
+    }
+
     local test_struct = {
-        '1', '2', '3'
+        'a',
+        100, nil,
+        list = a_list,
+        ['name'] = 'Tom',
+        age = 18,
     }
 
     local printer = pprint.PrettyPrinter()
