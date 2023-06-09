@@ -1,7 +1,6 @@
 ---
 --- pprint.lua
 ---
-
 local pprint = {
     _version = '0.1.0'
 }
@@ -33,7 +32,7 @@ end
 ---@return table
 local function split_string(input, delimiter)
     local result = {}
-    local pattern = string.format("([^%s]+)", delimiter)
+    local pattern = string.format('([^%s]+)', delimiter)
 
     for match in string.gmatch(input, pattern) do
         table.insert(result, match)
@@ -62,19 +61,25 @@ local function class(baseClass)
     return newClass
 end
 
+-------------------------------------------------------------------------------
+-- PrettyPrinter Class
+-------------------------------------------------------------------------------
+
+---@class PrettyPrinter
+---@field pprint fun(self, obj):nil
+---@field pformat fun(self, obj):nil
 local PrettyPrinter = class()
 
 ---New function of `PerttyPrinter` instance.
----@param indent integer?
----@param width integer?
----@param depth integer?
----@param compact boolean?
----@param sort_tables boolean?
----@param underscore_numbers boolean?
-function PrettyPrinter:new(indent, width, depth, compact, sort_tables, underscore_numbers)
+---@param args? table
+---       args.indent integer
+---       args.width integer
+---       args.depth integer
+function PrettyPrinter:new(args)
+    args = args or {}
 
-    local _indent = indent or 2
-    local _width = width or 80
+    local _indent = args.indent or 2
+    local _width = args.width or 80
 
     if _indent < 0 then
         error('indent must be >= 0')
@@ -84,19 +89,29 @@ function PrettyPrinter:new(indent, width, depth, compact, sort_tables, underscor
     end
 
     self._per_level_sp = _indent
-    self._width = width
-    self._depth = depth
-    self._compact = compact
-    self._sort_tables = sort_tables
-    self._underscore_numbers = underscore_numbers
+    self._width = _width
+    self._depth = args.depth
+    self._compact = args.compact
+    self._sort_tables = args.sort_tables
+    self._underscore_numbers = args.underscore_numbers
 end
 
----Pretty print
+--- Print the formatted representation of object to stream with a 
+--- trailing newline.
 ---@param obj any
 function PrettyPrinter:pprint(obj)
     local content = {}
     self:_format(obj, 0, 0, content, 0)
     print(table.concat(content))
+end
+
+--- Return the formatted representation of object as a string.
+---@param obj any
+---@return string
+function PrettyPrinter:pformat(obj)
+    local content = {}
+    self:_format(obj, 0, 0, content, 0)
+    return table.concat(content)
 end
 
 ---comment
@@ -107,7 +122,6 @@ end
 ---@param level integer
 function PrettyPrinter:_format(obj, indent, allowance, content, level)
     local o_typ = self:_match_type(obj)
-    --print(o_typ)
     local p_fn = self._dispatch[o_typ]
 
     if p_fn ~= nil then
@@ -133,22 +147,27 @@ function PrettyPrinter:_match_type(obj)
 end
 
 function PrettyPrinter:_p_table(obj, indent, allowance, content, level)
+    if self._depth ~= nil and level > self._depth then
+        _insert(content, '{...}')
+        return
+    end
+
     _insert(content, '{\n')
 
-    indent = indent + self._per_level_sp
+    local next_indent = indent + self._per_level_sp
     for k, v in pairs(obj) do
-        _insert(content, string.rep(' ', indent))
+        _insert(content, string.rep(' ', next_indent))
 
-        -- TODO: imporve the display of `k` 
+        -- TODO: imporve the display of `k`
         local repr_key = string.format('[%s] = ', tostring(k))
         _insert(content, repr_key)
 
-        self:_format(v, indent + #repr_key, allowance, content, level + 1)
+        self:_format(v, next_indent + #repr_key, allowance, content, level + 1)
 
         _insert(content, ',\n')
     end
 
-    _insert(content, '}')
+    _insert(content, string.rep(' ', indent) .. '}')
     if level <= 1 then
         _insert(content, '\n')
     end
@@ -156,37 +175,73 @@ function PrettyPrinter:_p_table(obj, indent, allowance, content, level)
 end
 
 function PrettyPrinter:_p_list(obj, indent, allowance, content, level)
+    if self._depth ~= nil and level > self._depth then
+        _insert(content, '{...}')
+        return
+    end
+
     _insert(content, '{\n')
 
-    indent = indent + self._per_level_sp
+    local next_indent = indent + self._per_level_sp
     for _, v in ipairs(obj) do
-        _insert(content, string.rep(' ', indent))
-        self:_format(v, indent, allowance, content, level + 1)
+        _insert(content, string.rep(' ', next_indent))
+        self:_format(v, next_indent, allowance, content, level + 1)
         _insert(content, ',\n')
     end
 
-    _insert(content, '}')
+    _insert(content, string.rep(' ', indent) .. '}')
     if level <= 1 then
         _insert(content, '\n')
     end
 
 end
 
-function PrettyPrinter:_p_string(obj, indent, allowance, content, level)
-    local str_list = split_string(obj, '\n')
+function PrettyPrinter:_p_string(str, indent, allowance, content, level)
+    local str_list = split_string(str, '\n')
     _insert(content, string.format('"%s"', str_list[1]))
 
     for i = 2, #str_list do
-        local line = '\n' .. string.rep(' ', indent) .. string.format('.."%s"', str_list[i])
+        local line = '\n' .. string.rep(' ', indent) ..
+                         string.format('.."%s"', str_list[i])
         _insert(content, line)
     end
 
 end
 
-function PrettyPrinter:_p_function(obj, indent, allowance, content, level)
-    -- TODO: finish it
+function PrettyPrinter:_p_function(fn, indent, allowance, content, level)
+    local fn_info = debug.getinfo(fn)
+    local params = {}
+
+    -- IMPROVE: cannot get function name
+    if fn_info.what == 'Lua' then
+        local idx = 1
+
+        while true do
+            local param_name = debug.getlocal(fn, idx)
+            if param_name then
+                _insert(params, param_name)
+                idx = 1 + idx
+            else
+                break
+            end
+        end
+
+        local params_str
+        if #params > 0 then
+            params_str = table.concat(params, ', ')
+        else
+            params_str = ''
+        end
+
+        _insert(content, string.format('function (%s) end', params_str))
+    else
+        -- cannot parse the fn
+        _insert(content, tostring(fn))
+    end
 end
 
+--- Used to obtain the formatting methods corresponding to different data types.
+--- The type of (nil, number) not needed.
 PrettyPrinter._dispatch = {
     _table = PrettyPrinter._p_table,
     _list = PrettyPrinter._p_list,

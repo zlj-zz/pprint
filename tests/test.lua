@@ -12,29 +12,40 @@ local function test(name, func)
 end
 
 
---test('PerttyPrinter.pprint', function ()
-    --local PerttyPrinter = pprint.PerttyPrinter
-    --assert(PerttyPrinter, table)
+------- test case -----------------------------
 
-    --local printer = PerttyPrinter()
-    --print(type(printer))
-    --printer.pprint(test_struct)
---end)
+local a_list = {
+    '1', '2', '3\n4'
+}
 
-function test()
-    local a_list = {
-        '1', '2', '3\n4'
-    }
+local test_struct = {
+    'a',
+    100, nil,
+    list = a_list,
+    ['name'] = 'Tom',
+    age = 18,
+    hobbys = {
+        'game',
+        ['ball'] = {
+            'football',
+            'basketball'
+        }
+    },
+    say_hello = function ()
+       print('hello')
+    end,
+}
 
-    local test_struct = {
-        'a',
-        100, nil,
-        list = a_list,
-        ['name'] = 'Tom',
-        age = 18,
-    }
-
-    local printer = pprint.PrettyPrinter()
-    printer:pprint(test_struct)
+function test_struct.jump(one, two, three)
+    -- content
 end
-test()
+
+test('PerttyPrinter.pprint', function ()
+    local printer = pprint.PrettyPrinter({depth=3})
+    printer:pprint(test_struct)
+
+    --local fn = test_struct.jump
+    --printer:pprint(debug.getinfo(fn, 'Snu'))
+    --printer:pprint(debug.getlocal(fn, 1))
+end)
+
