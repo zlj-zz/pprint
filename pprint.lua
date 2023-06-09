@@ -75,6 +75,7 @@ local PrettyPrinter = class()
 ---       args.indent integer
 ---       args.width integer
 ---       args.depth integer
+---       args.scientific_notation boolean
 function PrettyPrinter:new(args)
     args = args or {}
 
@@ -93,7 +94,7 @@ function PrettyPrinter:new(args)
     self._depth = args.depth
     self._compact = args.compact
     self._sort_tables = args.sort_tables
-    self._underscore_numbers = args.underscore_numbers
+    self._scientific_notation = args.scientific_notation
 end
 
 --- Print the formatted representation of object to stream with a 
@@ -146,7 +147,7 @@ function PrettyPrinter:_match_type(obj)
     return '_' .. o_typ
 end
 
-function PrettyPrinter:_p_table(obj, indent, allowance, content, level)
+function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
     if self._depth ~= nil and level > self._depth then
         _insert(content, '{...}')
         return
@@ -155,7 +156,7 @@ function PrettyPrinter:_p_table(obj, indent, allowance, content, level)
     _insert(content, '{\n')
 
     local next_indent = indent + self._per_level_sp
-    for k, v in pairs(obj) do
+    for k, v in pairs(tb) do
         _insert(content, string.rep(' ', next_indent))
 
         -- TODO: imporve the display of `k`
@@ -174,7 +175,7 @@ function PrettyPrinter:_p_table(obj, indent, allowance, content, level)
 
 end
 
-function PrettyPrinter:_p_list(obj, indent, allowance, content, level)
+function PrettyPrinter:_p_list(lis, indent, allowance, content, level)
     if self._depth ~= nil and level > self._depth then
         _insert(content, '{...}')
         return
@@ -183,7 +184,7 @@ function PrettyPrinter:_p_list(obj, indent, allowance, content, level)
     _insert(content, '{\n')
 
     local next_indent = indent + self._per_level_sp
-    for _, v in ipairs(obj) do
+    for _, v in ipairs(lis) do
         _insert(content, string.rep(' ', next_indent))
         self:_format(v, next_indent, allowance, content, level + 1)
         _insert(content, ',\n')
@@ -192,18 +193,6 @@ function PrettyPrinter:_p_list(obj, indent, allowance, content, level)
     _insert(content, string.rep(' ', indent) .. '}')
     if level <= 1 then
         _insert(content, '\n')
-    end
-
-end
-
-function PrettyPrinter:_p_string(str, indent, allowance, content, level)
-    local str_list = split_string(str, '\n')
-    _insert(content, string.format('"%s"', str_list[1]))
-
-    for i = 2, #str_list do
-        local line = '\n' .. string.rep(' ', indent) ..
-                         string.format('.."%s"', str_list[i])
-        _insert(content, line)
     end
 
 end
@@ -240,16 +229,75 @@ function PrettyPrinter:_p_function(fn, indent, allowance, content, level)
     end
 end
 
+function PrettyPrinter:_p_string(str, indent, allowance, content, level)
+    local str_list = split_string(str, '\n')
+    _insert(content, string.format('"%s"', str_list[1]))
+
+    for i = 2, #str_list do
+        local line = '\n' .. string.rep(' ', indent) ..
+                         string.format('.."%s"', str_list[i])
+        _insert(content, line)
+    end
+
+end
+
+function PrettyPrinter:_p_number(num, indent, allowance, content, level)
+    local num_limit = 10^6
+
+    if self._scientific_notation == true then
+        if num > num_limit or num < -num_limit then
+            _insert(content, string.format('%e', num))
+            return
+        end
+    end
+
+    _insert(content, num)
+end
+
 --- Used to obtain the formatting methods corresponding to different data types.
 --- The type of (nil, number) not needed.
 PrettyPrinter._dispatch = {
     _table = PrettyPrinter._p_table,
     _list = PrettyPrinter._p_list,
+    _function = PrettyPrinter._p_function,
     _string = PrettyPrinter._p_string,
-    _function = PrettyPrinter._p_function
+    _number = PrettyPrinter._p_number,
 
 }
 
+
+-------------------------------------------------------------------------------
+-- pprint
+-------------------------------------------------------------------------------
 pprint.PrettyPrinter = PrettyPrinter
+
+--- Print the formatted representation of object to stream with a 
+--- trailing newline.
+---@param obj any
+---@param indent? integer
+---@param width? integer
+---@param depth? integer
+pprint.pprint = function (obj, indent, width, depth)
+    local args = {
+        indent = indent,
+        width = width,
+        depth = depth,
+    }
+    PrettyPrinter(args):pprint(obj)
+end
+
+--- Return the formatted representation of object as a string.
+---@param obj any
+---@param indent? integer
+---@param width? integer
+---@param depth? integer
+pprint.pformat = function (obj, indent, width, depth)
+    local args = {
+        indent = indent,
+        width = width,
+        depth = depth,
+    }
+    return PrettyPrinter(args):pformat(obj)
+end
 
 return pprint

@@ -21,6 +21,7 @@ local a_list = {
 local test_struct = {
     'a',
     100, nil,
+    1234567,
     list = a_list,
     ['name'] = 'Tom',
     age = 18,
@@ -41,11 +42,11 @@ function test_struct.jump(one, two, three)
 end
 
 test('PerttyPrinter.pprint', function ()
-    local printer = pprint.PrettyPrinter({depth=3})
-    printer:pprint(test_struct)
+    local printer = pprint.PrettyPrinter({
+        depth=3,
+        scientific_notation=true
+    })
 
-    --local fn = test_struct.jump
-    --printer:pprint(debug.getinfo(fn, 'Snu'))
-    --printer:pprint(debug.getlocal(fn, 1))
+    printer:pprint(test_struct)
 end)
 
