@@ -41,7 +41,7 @@ function test_struct.jump(one, two, three)
     -- content
 end
 
-test('PerttyPrinter.pprint', function ()
+test('PrettyPrinter.pprint', function ()
     local printer = pprint.PrettyPrinter({
         depth=3,
         scientific_notation=true
@@ -49,4 +49,13 @@ test('PerttyPrinter.pprint', function ()
 
     printer:pprint(test_struct)
 end)
+
+test('pprint.isrecursive', function ()
+    assert(pprint.isrecursive('string') == true)
+    assert(pprint.isrecursive(123) == true)
+    assert(pprint.isrecursive(false) == true)
+    assert(pprint.isrecursive({'a', 'b'}) == false)
+end)
+
+--pprint.pprint(test_struct)
 

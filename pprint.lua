@@ -7,7 +7,21 @@ local pprint = {
 
 local _insert = table.insert
 
----Adjust a `table` whether is a list.
+--- Determine whether an element is in the table.
+---@param t table
+---@param ele any
+---@return boolean
+local function is_in_table(t, ele)
+    for _, v in ipairs(t) do
+        if v == ele then
+            return true
+        end
+    end
+
+    return false
+end
+
+--- Adjust a table whether is a list.
 ---@param t table
 ---@return boolean
 local function is_list(t)
@@ -26,11 +40,13 @@ local function is_list(t)
     return true
 end
 
----Split string.
+--- Split string by delimiter, and default: '\n'.
 ---@param input string
----@param delimiter string
+---@param delimiter? string
 ---@return table
 local function split_string(input, delimiter)
+    delimiter = delimiter or '\n'
+
     local result = {}
     local pattern = string.format('([^%s]+)', delimiter)
 
@@ -41,6 +57,9 @@ local function split_string(input, delimiter)
     return result
 end
 
+--- Help to create a class.
+---@param baseClass any
+---@return table
 local function class(baseClass)
     local newClass = {}
     newClass.__index = newClass
@@ -64,13 +83,16 @@ end
 -------------------------------------------------------------------------------
 -- PrettyPrinter Class
 -------------------------------------------------------------------------------
+local _normal_type = {
+    'number', 'string', 'boolean', 'nil'
+}
 
 ---@class PrettyPrinter
 ---@field pprint fun(self, obj):nil
 ---@field pformat fun(self, obj):nil
 local PrettyPrinter = class()
 
----New function of `PerttyPrinter` instance.
+---New function will be auto called when create `PrettyPrinter` instance.
 ---@param args? table
 ---       args.indent integer
 ---       args.width integer
@@ -159,11 +181,8 @@ function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
     for k, v in pairs(tb) do
         _insert(content, string.rep(' ', next_indent))
 
-        -- TODO: imporve the display of `k`
-        local repr_key = string.format('[%s] = ', tostring(k))
-        _insert(content, repr_key)
-
-        self:_format(v, next_indent + #repr_key, allowance, content, level + 1)
+        local repr_len = self:_p_table_key(k, content)
+        self:_format(v, next_indent + repr_len, allowance, content, level + 1)
 
         _insert(content, ',\n')
     end
@@ -173,6 +192,27 @@ function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
         _insert(content, '\n')
     end
 
+end
+
+---@return integer :len of the key need used
+function PrettyPrinter:_p_table_key(key, content)
+    local k_typ = self:_match_type(key)
+    local _format = function (pattern_str)
+        return string.format(pattern_str, tostring(key))
+    end
+
+    local key_repr
+    if k_typ == '_number' then
+        key_repr = _format('[%s] = ')
+    elseif k_typ == '_string' then
+        key_repr = _format('["%s"] = ')
+    else
+        key_repr = _format('%s = ')
+    end
+
+    _insert(content, key_repr)
+
+    return #key_repr
 end
 
 function PrettyPrinter:_p_list(lis, indent, allowance, content, level)
@@ -265,11 +305,33 @@ PrettyPrinter._dispatch = {
 
 }
 
+--- Determines whether object requires recursive representation.
+---@param obj any
+---@return boolean
+function PrettyPrinter:isrecursive(obj)
+    if is_in_table(_normal_type, type(obj)) then
+        return true
+    end
+
+    return false
+end
+
 
 -------------------------------------------------------------------------------
 -- pprint
 -------------------------------------------------------------------------------
 pprint.PrettyPrinter = PrettyPrinter
+
+--- Print the formatted representation of object to stream with a 
+--- trailing newline.
+--- The `args` should be a table, allowed to set some param in it.
+--- The supported settings are the same as `pprint.pprint`, the difference
+--- is that it is used as a whole.
+---@param obj any
+---@param args? table
+pprint.pp = function (obj, args)
+    PrettyPrinter(args):pprint(obj)
+end
 
 --- Print the formatted representation of object to stream with a 
 --- trailing newline.
@@ -298,6 +360,13 @@ pprint.pformat = function (obj, indent, width, depth)
         depth = depth,
     }
     return PrettyPrinter(args):pformat(obj)
+end
+
+--- Determines whether object requires recursive representation.
+---@param obj any
+---@return boolean
+pprint.isrecursive = function (obj)
+    return PrettyPrinter():isrecursive(obj)
 end
 
 return pprint
