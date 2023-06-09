@@ -1,11 +1,22 @@
 ---
 --- pprint.lua
 ---
+--- Copyright (c) 2023 Zachary Zhang
+---
+--- The purpose of this package is to provide a nice formatter that targets 
+--- arbitrary types. Friendly data types that support nesting, and can be 
+--- formatted recursively. It can support fast printing and get the formatted 
+--- string, and also provides a series of parameters to adjust the formatting 
+--- style. And it maintains a good performance as much as possible.
+---
+
+
 local pprint = {
     _version = '0.1.0'
 }
 
 local _insert = table.insert
+local _concat = table.concat
 
 --- Determine whether an element is in the table.
 ---@param t table
@@ -83,9 +94,7 @@ end
 -------------------------------------------------------------------------------
 -- PrettyPrinter Class
 -------------------------------------------------------------------------------
-local _normal_type = {
-    'number', 'string', 'boolean', 'nil'
-}
+local _no_isrecursive_type = {'number', 'string', 'boolean', 'nil'}
 
 ---@class PrettyPrinter
 ---@field pprint fun(self, obj):nil
@@ -94,10 +103,12 @@ local PrettyPrinter = class()
 
 ---New function will be auto called when create `PrettyPrinter` instance.
 ---@param args? table
----       args.indent integer
----       args.width integer
----       args.depth integer
----       args.scientific_notation boolean
+---       args.indent integer :Number of spaces to indent for each level of nesting.
+---       args.width integer :Attempted maximum number of columns in the output.
+---       args.depth integer :Depth limie, exceeding the limit will be folded.
+---       args.compact boolean :If true, several items will be combined in one line.
+---       args.scientific_notation boolean :If true, will display number with
+---                                         scientific notation.
 function PrettyPrinter:new(args)
     args = args or {}
 
@@ -119,13 +130,33 @@ function PrettyPrinter:new(args)
     self._scientific_notation = args.scientific_notation
 end
 
---- Print the formatted representation of object to stream with a 
+--- Determines whether object requires recursive representation.
+---@param obj any
+---@return boolean
+function PrettyPrinter:isrecursive(obj)
+    if is_in_table(_no_isrecursive_type, type(obj)) then
+        return true
+    end
+
+    return false
+end
+
+--- Determines whether the formatted representation of object is "readable" that
+--- can be used to reconstruct the object's value via `load()`.
+---@param obj any
+---@return boolean
+function PrettyPrinter:isreadable(obj)
+    return self:_format(obj, 0, 0, {}, 0)
+end
+
+--- Print the formatted representation of object to stream with a
 --- trailing newline.
 ---@param obj any
 function PrettyPrinter:pprint(obj)
     local content = {}
     self:_format(obj, 0, 0, content, 0)
-    print(table.concat(content))
+
+    print(self:_try_compact(content))
 end
 
 --- Return the formatted representation of object as a string.
@@ -134,28 +165,43 @@ end
 function PrettyPrinter:pformat(obj)
     local content = {}
     self:_format(obj, 0, 0, content, 0)
-    return table.concat(content)
+
+    return self:_try_compact(content)
 end
 
----comment
+--- Detect and try if formatted as one line.
+---@param content table : A table content with formated.
+---@return string
+function PrettyPrinter:_try_compact(content)
+    if self._compact == true then
+        local format_str = _concat(content):gsub('\n', ''):gsub(' +', ' ')
+        return format_str
+    else
+        return table.concat(content)
+    end
+end
+
+---
 ---@param obj any
 ---@param indent integer
 ---@param allowance integer
 ---@param content table
 ---@param level integer
+---@return boolean :isreadable
 function PrettyPrinter:_format(obj, indent, allowance, content, level)
     local o_typ = self:_match_type(obj)
     local p_fn = self._dispatch[o_typ]
 
     if p_fn ~= nil then
-        p_fn(self, obj, indent, allowance, content, level + 1)
+        return p_fn(self, obj, indent, allowance, content, level + 1)
     else
         _insert(content, tostring(obj))
+        return false
     end
 end
 
 ---Check a type of object.
----Would return: nil, boolean, number, string, function, table, list
+---Would return: (nil, boolean, number, string, function, table, list) and startwith '_'.
 ---@param obj any
 ---@return string
 function PrettyPrinter:_match_type(obj)
@@ -169,20 +215,24 @@ function PrettyPrinter:_match_type(obj)
     return '_' .. o_typ
 end
 
+---@return boolean :isreadable
 function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
     if self._depth ~= nil and level > self._depth then
         _insert(content, '{...}')
-        return
+        return false
     end
 
     _insert(content, '{\n')
+
+    local _isreadable = true
 
     local next_indent = indent + self._per_level_sp
     for k, v in pairs(tb) do
         _insert(content, string.rep(' ', next_indent))
 
         local repr_len = self:_p_table_key(k, content)
-        self:_format(v, next_indent + repr_len, allowance, content, level + 1)
+        _isreadable = self:_format(v, next_indent + repr_len, allowance,
+            content, level + 1)
 
         _insert(content, ',\n')
     end
@@ -192,12 +242,13 @@ function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
         _insert(content, '\n')
     end
 
+    return true and _isreadable
 end
 
 ---@return integer :len of the key need used
 function PrettyPrinter:_p_table_key(key, content)
     local k_typ = self:_match_type(key)
-    local _format = function (pattern_str)
+    local _format = function(pattern_str)
         return string.format(pattern_str, tostring(key))
     end
 
@@ -215,18 +266,22 @@ function PrettyPrinter:_p_table_key(key, content)
     return #key_repr
 end
 
+---@return boolean :isreadable
 function PrettyPrinter:_p_list(lis, indent, allowance, content, level)
     if self._depth ~= nil and level > self._depth then
         _insert(content, '{...}')
-        return
+        return false
     end
 
     _insert(content, '{\n')
 
+    local _isreadable = true
+
     local next_indent = indent + self._per_level_sp
     for _, v in ipairs(lis) do
         _insert(content, string.rep(' ', next_indent))
-        self:_format(v, next_indent, allowance, content, level + 1)
+        _isreadable =
+            self:_format(v, next_indent, allowance, content, level + 1)
         _insert(content, ',\n')
     end
 
@@ -235,8 +290,10 @@ function PrettyPrinter:_p_list(lis, indent, allowance, content, level)
         _insert(content, '\n')
     end
 
+    return true and _isreadable
 end
 
+---@return boolean :isreadable
 function PrettyPrinter:_p_function(fn, indent, allowance, content, level)
     local fn_info = debug.getinfo(fn)
     local params = {}
@@ -267,8 +324,11 @@ function PrettyPrinter:_p_function(fn, indent, allowance, content, level)
         -- cannot parse the fn
         _insert(content, tostring(fn))
     end
+
+    return false
 end
 
+---@return boolean :isreadable
 function PrettyPrinter:_p_string(str, indent, allowance, content, level)
     local str_list = split_string(str, '\n')
     _insert(content, string.format('"%s"', str_list[1]))
@@ -279,19 +339,28 @@ function PrettyPrinter:_p_string(str, indent, allowance, content, level)
         _insert(content, line)
     end
 
+    return true
 end
 
+---@return boolean :isreadable
 function PrettyPrinter:_p_number(num, indent, allowance, content, level)
-    local num_limit = 10^6
+    local num_limit = 10 ^ 6
 
     if self._scientific_notation == true then
         if num > num_limit or num < -num_limit then
             _insert(content, string.format('%e', num))
-            return
+            return true
         end
     end
 
     _insert(content, num)
+    return true
+end
+
+---@return boolean :isreadable
+function PrettyPrinter:_p_nil(n, indent, allowance, content, level)
+    _insert(content, tonumber(n))
+    return true
 end
 
 --- Used to obtain the formatting methods corresponding to different data types.
@@ -302,48 +371,37 @@ PrettyPrinter._dispatch = {
     _function = PrettyPrinter._p_function,
     _string = PrettyPrinter._p_string,
     _number = PrettyPrinter._p_number,
+    _nil = PrettyPrinter._p_nil
 
 }
-
---- Determines whether object requires recursive representation.
----@param obj any
----@return boolean
-function PrettyPrinter:isrecursive(obj)
-    if is_in_table(_normal_type, type(obj)) then
-        return true
-    end
-
-    return false
-end
-
 
 -------------------------------------------------------------------------------
 -- pprint
 -------------------------------------------------------------------------------
 pprint.PrettyPrinter = PrettyPrinter
 
---- Print the formatted representation of object to stream with a 
+--- Print the formatted representation of object to stream with a
 --- trailing newline.
 --- The `args` should be a table, allowed to set some param in it.
 --- The supported settings are the same as `pprint.pprint`, the difference
 --- is that it is used as a whole.
 ---@param obj any
 ---@param args? table
-pprint.pp = function (obj, args)
+pprint.pp = function(obj, args)
     PrettyPrinter(args):pprint(obj)
 end
 
---- Print the formatted representation of object to stream with a 
+--- Print the formatted representation of object to stream with a
 --- trailing newline.
 ---@param obj any
 ---@param indent? integer
 ---@param width? integer
 ---@param depth? integer
-pprint.pprint = function (obj, indent, width, depth)
+pprint.pprint = function(obj, indent, width, depth)
     local args = {
         indent = indent,
         width = width,
-        depth = depth,
+        depth = depth
     }
     PrettyPrinter(args):pprint(obj)
 end
@@ -353,11 +411,11 @@ end
 ---@param indent? integer
 ---@param width? integer
 ---@param depth? integer
-pprint.pformat = function (obj, indent, width, depth)
+pprint.pformat = function(obj, indent, width, depth)
     local args = {
         indent = indent,
         width = width,
-        depth = depth,
+        depth = depth
     }
     return PrettyPrinter(args):pformat(obj)
 end
@@ -365,7 +423,7 @@ end
 --- Determines whether object requires recursive representation.
 ---@param obj any
 ---@return boolean
-pprint.isrecursive = function (obj)
+pprint.isrecursive = function(obj)
     return PrettyPrinter():isrecursive(obj)
 end
 
