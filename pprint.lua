@@ -33,7 +33,7 @@ end
 --- Adjust a table whether is a list.
 ---@param t table
 ---@return boolean
-local function is_list(t)
+local function is_table_list(t)
     local i = 1
     for k in pairs(t) do
         if t[i] == nil then
@@ -47,6 +47,13 @@ local function is_list(t)
     end
 
     return true
+end
+
+--- Adjust a table whether empty.
+---@param t table
+---@return boolean
+local function is_table_empty(t)
+    return next(t) == nil
 end
 
 --- Split string by delimiter, and default: '\n'.
@@ -209,17 +216,18 @@ end
 ---@return string
 function PrettyPrinter:_match_type(obj)
     local o_typ = type(obj)
-    if o_typ == 'table' then
-        if is_list(obj) then
-            return '_list'
-        end
-    end
-
     return '_' .. o_typ
 end
 
 ---@return boolean @isreadable
 function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
+    -- whether empty table
+    if is_table_empty(tb) then
+        _insert(content, '{ }')
+        return true
+    end
+
+    -- whether depth than max level
     if self._depth ~= nil and level > self._depth then
         _insert(content, '{...}')
         return false
@@ -227,20 +235,14 @@ function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
 
     _insert(content, '{\n')
 
-    local k_isreadable = true
-    local v_isreadable = true
-
     local next_indent = indent + self._per_level_sp
-    for k, v in pairs(tb) do
-        _insert(content, string.rep(' ', next_indent))
+    local _isreadable
 
-        local repr_len, _k_isreadable = self:_p_table_key(k, content)
-        k_isreadable = _k_isreadable and k_isreadable
-
-        v_isreadable = self:_format(v, next_indent + repr_len, allowance,
-            content, level + 1) and v_isreadable
-
-        _insert(content, ',\n')
+    local _is_list = is_table_list(tb)
+    if _is_list then
+        _isreadable = self:_p_t_list(tb, next_indent, allowance, content, level)
+    else
+        _isreadable = self:_p_t_map(tb, next_indent, allowance, content, level)
     end
 
     _insert(content, string.rep(' ', indent) .. '}')
@@ -248,7 +250,7 @@ function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
         _insert(content, '\n')
     end
 
-    return true and k_isreadable and v_isreadable
+    return _isreadable
 end
 
 ---@return integer @Len of the key need used
@@ -279,30 +281,37 @@ function PrettyPrinter:_p_table_key(key, content)
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_list(lis, indent, allowance, content, level)
-    if self._depth ~= nil and level > self._depth then
-        _insert(content, '{...}')
-        return false
-    end
+function PrettyPrinter:_p_t_map(map, indent, allowance, content, level)
+    local k_isreadable = true
+    local v_isreadable = true
 
-    _insert(content, '{\n')
+    for k, v in pairs(map) do
+        _insert(content, string.rep(' ', indent))
 
-    local _isreadable = true
+        local repr_len, _k_isreadable = self:_p_table_key(k, content)
+        k_isreadable = _k_isreadable and k_isreadable
 
-    local next_indent = indent + self._per_level_sp
-    for _, v in ipairs(lis) do
-        _insert(content, string.rep(' ', next_indent))
-        _isreadable =
-            self:_format(v, next_indent, allowance, content, level + 1)
+        v_isreadable = self:_format(v, indent + repr_len, allowance,
+            content, level + 1) and v_isreadable
+
         _insert(content, ',\n')
     end
 
-    _insert(content, string.rep(' ', indent) .. '}')
-    if level <= 1 then
-        _insert(content, '\n')
+    return k_isreadable and v_isreadable
+end
+
+---@return boolean @isreadable
+function PrettyPrinter:_p_t_list(lis, indent, allowance, content, level)
+    local _isreadable = true
+
+    for _, v in ipairs(lis) do
+        _insert(content, string.rep(' ', indent))
+        _isreadable =
+            self:_format(v, indent, allowance, content, level + 1)
+        _insert(content, ',\n')
     end
 
-    return true and _isreadable
+    return _isreadable
 end
 
 ---@return boolean @isreadable
@@ -379,7 +388,6 @@ end
 --- The type of (nil, number) not needed.
 PrettyPrinter._dispatch = {
     _table = PrettyPrinter._p_table,
-    _list = PrettyPrinter._p_list,
     _function = PrettyPrinter._p_function,
     _string = PrettyPrinter._p_string,
     _number = PrettyPrinter._p_number,
