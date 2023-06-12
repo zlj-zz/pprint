@@ -57,6 +57,11 @@ local function is_table_empty(t)
 end
 
 --- Split string by delimiter, and default: '\n'.
+--- Cases:
+---     '123' -> {"123"}
+---     '123\n' -> {"123",""}
+---     '123\n\n' -> {"123","","",}
+---     '123\n123\n123' -> {"123","123","123"}
 ---@param input string
 ---@param delimiter? string
 ---@return table
@@ -64,9 +69,10 @@ local function split_string(input, delimiter)
     delimiter = delimiter or '\n'
 
     local result = {}
-    local pattern = string.format('([^%s]+)', delimiter)
+    --local pattern = string.format('([^%s]+)', delimiter)
+    local pattern = "([^"..delimiter.."]*)"..delimiter
 
-    for match in string.gmatch(input, pattern) do
+    for match in string.gmatch(input .. delimiter, pattern) do
         table.insert(result, match)
     end
 
@@ -203,6 +209,7 @@ function PrettyPrinter:_format(obj, indent, allowance, content, level)
     local p_fn = self._dispatch[o_typ]
 
     if p_fn ~= nil then
+        -- onlu plus level here, if recursively will recall `_format`
         return p_fn(self, obj, indent, allowance, content, level + 1)
     else
         _insert(content, tostring(obj))
@@ -228,7 +235,7 @@ function PrettyPrinter:_p_table(tb, indent, allowance, content, level)
     end
 
     -- whether depth than max level
-    if self._depth ~= nil and level > self._depth then
+    if self._depth ~= nil and level >= self._depth then
         _insert(content, '{...}')
         return false
     end
@@ -292,7 +299,7 @@ function PrettyPrinter:_p_t_map(map, indent, allowance, content, level)
         k_isreadable = _k_isreadable and k_isreadable
 
         v_isreadable = self:_format(v, indent + repr_len, allowance,
-            content, level + 1) and v_isreadable
+            content, level ) and v_isreadable
 
         _insert(content, ',\n')
     end
@@ -307,7 +314,7 @@ function PrettyPrinter:_p_t_list(lis, indent, allowance, content, level)
     for _, v in ipairs(lis) do
         _insert(content, string.rep(' ', indent))
         _isreadable =
-            self:_format(v, indent, allowance, content, level + 1)
+            self:_format(v, indent, allowance, content, level)
         _insert(content, ',\n')
     end
 
@@ -352,13 +359,21 @@ end
 ---@return boolean @isreadable
 function PrettyPrinter:_p_string(str, indent, allowance, content, level)
     local str_list = split_string(str, '\n')
-    _insert(content, string.format('"%s"', str_list[1]))
-
-    for i = 2, #str_list do
-        local line = '\n' .. string.rep(' ', indent) ..
-                         string.format('.."%s"', str_list[i])
-        _insert(content, line)
+    if #str_list == 1 then
+        _insert(content, string.format('"%s"', str_list[1]))
+        return true
     end
+
+    local _part_str
+    _insert(content, string.format('"%s\\n"', str_list[1]))
+    for i = 2, #str_list - 1 do
+        _part_str = '..\n' .. string.rep(' ', indent) ..
+                     string.format('"%s\\n"', str_list[i])
+        _insert(content, _part_str)
+    end
+    _part_str = '..\n' .. string.rep(' ', indent) ..
+                 string.format('"%s"', str_list[#str_list])
+    _insert(content, _part_str)
 
     return true
 end
@@ -380,7 +395,7 @@ end
 
 ---@return boolean @isreadable
 function PrettyPrinter:_p_nil(n, indent, allowance, content, level)
-    _insert(content, tonumber(n))
+    _insert(content, tostring(n))
     return true
 end
 
