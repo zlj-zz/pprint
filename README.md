@@ -1,3 +1,5 @@
+![pprint.png](icon.png)
+
 A lua library completes data beautification output, and has no external dependencies.
 
 # Require
