@@ -13,21 +13,12 @@ local pprint = {
     _version = '0.1.0'
 }
 
-local _insert = table.insert
+-- localization lib
+local string = string
 local _concat = table.concat
-
---- Determine whether an element is in the table.
----@param t table
----@param ele any
----@return boolean
-local function is_in_table(t, ele)
-    for _, v in ipairs(t) do
-        if v == ele then
-            return true
-        end
-    end
-
-    return false
+-- preferred over table.insert due to better performance on PUC Lua.
+local _insert = function(tb, val)
+    tb[#tb + 1] = val
 end
 
 --- Adjust a table whether is a list.
@@ -56,6 +47,7 @@ local function is_table_empty(t)
     return next(t) == nil
 end
 
+local split_string_pattern = '([^%s]*)%s'
 --- Split string by delimiter, and default: '\n'.
 --- Cases:
 ---     '123' -> {"123"}
@@ -74,11 +66,9 @@ local function split_string(input, delimiter)
     -- has default delimiter
     delimiter = delimiter or '\n'
 
-    --local pattern = string.format('([^%s]+)', delimiter)
-    local pattern = "([^"..delimiter.."]*)"..delimiter
-
-    for match in string.gmatch(input .. delimiter, pattern) do
-        table.insert(result, match)
+    for match in string.gmatch(input .. delimiter, split_string_pattern:format(
+        delimiter, delimiter)) do
+        _insert(result, match)
     end
 
     return result
@@ -151,6 +141,7 @@ function PrettyPrinter:new(args)
     self._compact = args.compact
     self._sort_tables = args.sort_tables
     self._scientific_notation = args.scientific_notation
+    self._number_limit = 10 ^ 6
 end
 
 --- Determines whether object requires recursive representation.
@@ -165,7 +156,7 @@ end
 ---@param obj any
 ---@return boolean
 function PrettyPrinter:isreadable(obj)
-    return self:_format(obj, 0,  {}, 0)
+    return self:_format(obj, 0, {}, 0)
 end
 
 --- Print the formatted representation of object to stream with a
@@ -173,7 +164,7 @@ end
 ---@param obj any
 function PrettyPrinter:pprint(obj)
     local content = {}
-    self:_format(obj, 0,  content, 0)
+    self:_format(obj, 0, content, 0)
 
     print(self:_try_compact(content))
 end
@@ -183,7 +174,7 @@ end
 ---@return string
 function PrettyPrinter:pformat(obj)
     local content = {}
-    self:_format(obj, 0,  content, 0)
+    self:_format(obj, 0, content, 0)
 
     return self:_try_compact(content)
 end
@@ -196,7 +187,7 @@ function PrettyPrinter:_try_compact(content)
         local format_str = _concat(content):gsub('\n', ''):gsub(' +', ' ')
         return format_str
     else
-        return table.concat(content)
+        return _concat(content)
     end
 end
 
@@ -264,6 +255,60 @@ function PrettyPrinter:_p_table(tb, indent, content, level)
     return _isreadable
 end
 
+---@return boolean @isreadable
+function PrettyPrinter:_p_t_map(map, indent, content, level)
+    local k_isreadable = true
+    local v_isreadable = true
+
+    local keys = map -- default
+    if self._sort_tables == true then
+        keys = {}
+        for k, _ in pairs(map) do
+            _insert(keys, k)
+            table.sort(keys, function(a, b)
+                return tostring(a) < tostring(b)
+            end)
+        end
+
+    end
+
+    local k, idx = self:_map_next_k(keys, nil)
+    local v
+
+    while k ~= nil do
+        -- for k, v in pairs(map) do
+        v = map[k]
+
+        _insert(content, string.rep(' ', indent))
+
+        local repr_len, _k_isreadable = self:_p_table_key(k, content)
+        k_isreadable = _k_isreadable and k_isreadable
+
+        v_isreadable = self:_format(v, indent + repr_len, content, level) and
+                           v_isreadable
+
+        _insert(content, ',\n')
+
+        k, idx = self:_map_next_k(keys, idx)
+    end
+
+    return k_isreadable and v_isreadable
+end
+
+--- Get the key and next index of table.
+---@param tb table
+---@param index any
+function PrettyPrinter:_map_next_k(tb, index)
+    local k, v = next(tb, index)
+
+    if self._sort_tables == true then
+        return v, k
+    else
+        return k, k
+    end
+end
+
+--- Format the key of map.
 ---@return integer @Len of the key need used
 ---@return boolean @isreadable
 function PrettyPrinter:_p_table_key(key, content)
@@ -273,14 +318,12 @@ function PrettyPrinter:_p_table_key(key, content)
     end
 
     local key_repr
-    local isreadable
+    local isreadable = true
 
     if k_typ == '_number' or k_typ == '_boolean' or k_typ == '_nil' then
         key_repr = _format('[%s] = ')
-        isreadable = true
     elseif k_typ == '_string' then
         key_repr = _format('["%s"] = ')
-        isreadable = true
     else
         key_repr = _format('%s = ')
         isreadable = false
@@ -292,38 +335,19 @@ function PrettyPrinter:_p_table_key(key, content)
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_t_map(map, indent, content, level)
-    local k_isreadable = true
-    local v_isreadable = true
-
-    for k, v in pairs(map) do
-        _insert(content, string.rep(' ', indent))
-
-        local repr_len, _k_isreadable = self:_p_table_key(k, content)
-        k_isreadable = _k_isreadable and k_isreadable
-
-        v_isreadable = self:_format(v, indent + repr_len, content, level )
-                        and v_isreadable
-
-        _insert(content, ',\n')
-    end
-
-    return k_isreadable and v_isreadable
-end
-
----@return boolean @isreadable
 function PrettyPrinter:_p_t_list(lis, indent, content, level)
     local _isreadable = true
 
     for i = 1, #lis - 1 do
         _insert(content, string.rep(' ', indent))
-        _isreadable =
-            self:_format(lis[i], indent, content, level)
+        _isreadable = self:_format(lis[i], indent, content, level) and
+                          _isreadable
         _insert(content, ',\n')
     end
 
     _insert(content, string.rep(' ', indent))
-    _isreadable = self:_format(lis[#lis], indent, content, level)
+    _isreadable = self:_format(lis[#lis], indent, content, level) and
+                      _isreadable
     _insert(content, '\n')
 
     return _isreadable
@@ -350,7 +374,7 @@ function PrettyPrinter:_p_function(fn, indent, content, level)
 
         local params_str
         if #params > 0 then
-            params_str = table.concat(params, ', ')
+            params_str = _concat(params, ', ')
         else
             params_str = ''
         end
@@ -366,6 +390,12 @@ end
 
 ---@return boolean @isreadable
 function PrettyPrinter:_p_string(str, indent, content, level)
+    -- compact not need process
+    if self._compact == true then
+        _insert(content, str:gsub('\n', '\\n'))
+        return true
+    end
+
     local str_list = split_string(str, '\n')
     if #str_list == 1 then
         _insert(content, string.format('"%s"', str_list[1]))
@@ -374,27 +404,37 @@ function PrettyPrinter:_p_string(str, indent, content, level)
 
     local _part_str
     _insert(content, string.format('"%s\\n"', str_list[1]))
+
+    -- TODO: Performance Testing
     for i = 2, #str_list - 1 do
-        _part_str = '..\n' .. string.rep(' ', indent) ..
-                     string.format('"%s\\n"', str_list[i])
-        _insert(content, _part_str)
+        -- _part_str = '..\n' .. string.rep(' ', indent) ..
+        -- string.format('"%s\\n"', str_list[i])
+        -- _insert(content, _part_str)
+
+        _insert(content, '..\n')
+        _insert(content, string.rep(' ', indent))
+        _insert(content, string.format('"%s\\n"', str_list[i]))
     end
-    _part_str = '..\n' .. string.rep(' ', indent) ..
-                 string.format('"%s"', str_list[#str_list])
-    _insert(content, _part_str)
+    -- _part_str = '..\n' .. string.rep(' ', indent) ..
+    -- string.format('"%s"', str_list[#str_list])
+    -- _insert(content, _part_str)
+
+    _insert(content, '..\n')
+    _insert(content, string.rep(' ', indent))
+    _insert(content, string.format('"%sn"', str_list[#str_list]))
 
     return true
 end
 
 ---@return boolean @isreadable
 function PrettyPrinter:_p_number(num, indent, content, level)
-    local num_limit = 10 ^ 6
+    local num_limit = self._number_limit
 
-    if self._scientific_notation == true then
-        if num > num_limit or num < -num_limit then
-            _insert(content, string.format('%e', num))
-            return true
-        end
+    if self._scientific_notation == true and
+        (num > num_limit or num < -num_limit) then
+
+        _insert(content, string.format('%e', num))
+        return true
     end
 
     _insert(content, num)
@@ -474,7 +514,7 @@ end
 --- can be used to reconstruct the object's value via `load()`.
 ---@param obj any
 ---@return boolean
-pprint.isreadable = function (obj)
+pprint.isreadable = function(obj)
     return PrettyPrinter:isreadable(obj)
 end
 

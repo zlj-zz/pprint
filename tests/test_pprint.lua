@@ -29,7 +29,7 @@ function captured:hijack_print(name)
         --local info = debug.getinfo(level, "n")
         --local caller = info.name or "unknown"
 
-        local output = {...}
+        local output = { ... }
         table.insert(self.c_output, {
             caller = self.c_name,
             content = table.concat(output, "\t")
@@ -55,10 +55,9 @@ function captured:test(name, func)
     self:unhijack_print()
 end
 
-
 ------- ready -----------------------------------
 
-local a_list = {'1', '2', '3\n4'}
+local a_list = { '1', '2', '3\n4' }
 
 local say = function(msg)
     print('say: ' .. msg)
@@ -70,9 +69,9 @@ local person = {
     parent = nil,
     hobbys = {
         'game',
-        ['ball'] = {'football', 'basketball'}
+        ['ball'] = { 'football', 'basketball' }
     },
-    actions = {'sit', 'walk', 'run', say},
+    actions = { 'sit', 'walk', 'run', say },
     2 ^ 26, -- a big number
     list = a_list,
     {}
@@ -89,7 +88,7 @@ captured:test('PrettyPrinter:isrecursive', function()
     assert(pprint.PrettyPrinter:isrecursive('string') == false)
     assert(pprint.PrettyPrinter:isrecursive(123) == false)
     assert(pprint.PrettyPrinter:isrecursive(false) == false)
-    assert(pprint.PrettyPrinter:isrecursive({'a', 'b'}) == true)
+    assert(pprint.PrettyPrinter:isrecursive({ 'a', 'b' }) == true)
 end)
 
 captured:test('PrettyPrinter:isreadable', function()
@@ -102,16 +101,17 @@ captured:test('PrettyPrinter:isreadable', function()
     assert(pprint.PrettyPrinter():isreadable('a') == true)
     assert(pprint.PrettyPrinter():isreadable(nil) == true)
 
-    assert(pprint.PrettyPrinter():isreadable({1, 2, 3}) == true)
+    assert(pprint.PrettyPrinter():isreadable({ 1, 2, 3 }) == true)
 
     assert(pprint.PrettyPrinter():isreadable({
-        abc = function (...)
-        -- no content
-        end}) == false)
-    assert(pprint.PrettyPrinter():isreadable({
-        [function () end] = 'abc'
+        abc = function(...)
+            -- no content
+        end
     }) == false)
-
+    assert(pprint.PrettyPrinter():isreadable({
+        [function()
+        end] = 'abc'
+    }) == false)
 end)
 
 captured:test('PrettyPrinter.pprint:compact', function()
@@ -125,6 +125,7 @@ end)
 captured:test('PrettyPrinter.pprint:depth', function()
     local printer = pprint.PrettyPrinter({
         depth = 3,
+        --sort_tables = true,
         scientific_notation = true
     })
 
@@ -135,14 +136,13 @@ captured:test('PrettyPrinter.pprint', function()
     local tb = {}
     local tmp = tb
     for i = 1, 10 do
-        tmp['key']= {}
+        tmp['key'] = {}
         tmp = tmp.key
     end
 
-    pprint.PrettyPrinter({depth=6}):pprint(tb)
+    pprint.PrettyPrinter({ depth = 6 }):pprint(tb)
 end)
 
 
 ------- last ------------------------------------
 captured:pour()
-
