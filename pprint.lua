@@ -163,41 +163,36 @@ end
 --- trailing newline.
 ---@param obj any
 function PrettyPrinter:pprint(obj)
-    local content = {}
-    self:_format(obj, 0, content, 0)
+    local context = {}
+    self:_format(obj, 0, context, 0)
 
-    print(self:_try_compact(content))
+    print(self:_to_assemble(context))
 end
 
 --- Return the formatted representation of object as a string.
 ---@param obj any
 ---@return string
 function PrettyPrinter:pformat(obj)
-    local content = {}
-    self:_format(obj, 0, content, 0)
+    local context = {}
+    self:_format(obj, 0, context, 0)
 
-    return self:_try_compact(content)
+    return self:_to_assemble(context)
 end
 
---- Detect and try if formatted as one line.
----@param content table @A table content with formated.
+--- Help to assemble the context.
+---@param context table @A table context with formated.
 ---@return string
-function PrettyPrinter:_try_compact(content)
-    if self._compact == true then
-        local format_str = _concat(content):gsub('\n', ''):gsub(' +', ' ')
-        return format_str
-    else
-        return _concat(content)
-    end
+function PrettyPrinter:_to_assemble(context)
+    return _concat(context)
 end
 
 ---
 ---@param obj any
 ---@param indent integer
----@param content table
+---@param context table
 ---@param level integer
 ---@return boolean @isreadable
-function PrettyPrinter:_format(obj, indent, content, level)
+function PrettyPrinter:_format(obj, indent, context, level)
     local o_typ = self:_match_type(obj)
 
     ---@type fun(...):boolean @Corresponding type of processing function
@@ -205,9 +200,9 @@ function PrettyPrinter:_format(obj, indent, content, level)
 
     if p_fn ~= nil then
         -- onlu plus level here, if recursively will recall `_format`
-        return p_fn(self, obj, indent, content, level + 1)
+        return p_fn(self, obj, indent, context, level + 1)
     else
-        _insert(content, tostring(obj))
+        _insert(context, tostring(obj))
         return false
     end
 end
@@ -222,43 +217,54 @@ function PrettyPrinter:_match_type(obj)
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_table(tb, indent, content, level)
+function PrettyPrinter:_p_table(tb, indent, context, level)
     -- whether empty table
     if is_table_empty(tb) then
-        _insert(content, '{ }')
+        _insert(context, '{ }')
         return true
     end
 
     -- whether depth than max level
     if self._depth ~= nil and level >= self._depth then
-        _insert(content, '{...}')
+        _insert(context, '{...}')
         return false
     end
 
-    _insert(content, '{\n')
+    local start_symbol, indent_space = '{\n', string.rep(' ', indent)
+    if self._compact == true then
+        start_symbol, indent_space = '{', ' '
+    end
+
+    _insert(context, start_symbol)
 
     local next_indent = indent + self._per_level_sp
     local _isreadable
 
     local _is_list = is_table_list(tb)
     if _is_list then
-        _isreadable = self:_p_t_list(tb, next_indent, content, level)
+        _isreadable = self:_p_t_list(tb, next_indent, context, level)
     else
-        _isreadable = self:_p_t_map(tb, next_indent, content, level)
+        _isreadable = self:_p_t_map(tb, next_indent, context, level)
     end
 
-    _insert(content, string.rep(' ', indent) .. '}')
-    if level <= 1 then
-        _insert(content, '\n')
+    _insert(context, indent_space)
+    _insert(context, '}')
+    if level <= 1 and self._compact ~= true then
+        _insert(context, '\n')
     end
 
     return _isreadable
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_t_map(map, indent, content, level)
+function PrettyPrinter:_p_t_map(map, indent, context, level)
     local k_isreadable = true
     local v_isreadable = true
+
+    local item_end_symbol, indent_space = ',\n', string.rep(' ', indent)
+    if self._compact == true then
+        item_end_symbol, indent_space = ',', ' '
+    end
 
     local keys = map -- default
     if self._sort_tables == true then
@@ -279,15 +285,15 @@ function PrettyPrinter:_p_t_map(map, indent, content, level)
         -- for k, v in pairs(map) do
         v = map[k]
 
-        _insert(content, string.rep(' ', indent))
+        _insert(context, indent_space)
 
-        local repr_len, _k_isreadable = self:_p_table_key(k, content)
+        local repr_len, _k_isreadable = self:_p_table_key(k, context)
         k_isreadable = _k_isreadable and k_isreadable
 
-        v_isreadable = self:_format(v, indent + repr_len, content, level) and
+        v_isreadable = self:_format(v, indent + repr_len, context, level) and
                            v_isreadable
 
-        _insert(content, ',\n')
+        _insert(context, item_end_symbol)
 
         k, idx = self:_map_next_k(keys, idx)
     end
@@ -298,6 +304,7 @@ end
 --- Get the key and next index of table.
 ---@param tb table
 ---@param index any
+---@return any, any
 function PrettyPrinter:_map_next_k(tb, index)
     local k, v = next(tb, index)
 
@@ -311,7 +318,7 @@ end
 --- Format the key of map.
 ---@return integer @Len of the key need used
 ---@return boolean @isreadable
-function PrettyPrinter:_p_table_key(key, content)
+function PrettyPrinter:_p_table_key(key, context)
     local k_typ = self:_match_type(key)
     local _format = function(pattern_str)
         return string.format(pattern_str, tostring(key))
@@ -329,32 +336,39 @@ function PrettyPrinter:_p_table_key(key, content)
         isreadable = false
     end
 
-    _insert(content, key_repr)
+    _insert(context, key_repr)
 
     return #key_repr, isreadable
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_t_list(lis, indent, content, level)
+function PrettyPrinter:_p_t_list(lis, indent, context, level)
     local _isreadable = true
 
-    for i = 1, #lis - 1 do
-        _insert(content, string.rep(' ', indent))
-        _isreadable = self:_format(lis[i], indent, content, level) and
-                          _isreadable
-        _insert(content, ',\n')
+    local item_end_symbol, indent_space = ',\n', string.rep(' ', indent)
+    if self._compact == true then
+        item_end_symbol, indent_space = ',', ' '
     end
 
-    _insert(content, string.rep(' ', indent))
-    _isreadable = self:_format(lis[#lis], indent, content, level) and
+    for i = 1, #lis - 1 do
+        _insert(context, indent_space)
+        _isreadable = self:_format(lis[i], indent, context, level) and
+                          _isreadable
+        _insert(context, item_end_symbol)
+    end
+
+    _insert(context, indent_space)
+    _isreadable = self:_format(lis[#lis], indent, context, level) and
                       _isreadable
-    _insert(content, '\n')
+    if self._compact ~= true then
+        _insert(context, '\n')
+    end
 
     return _isreadable
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_function(fn, indent, content, level)
+function PrettyPrinter:_p_function(fn, indent, context, level)
     local fn_info = debug.getinfo(fn)
     local params = {}
 
@@ -379,71 +393,72 @@ function PrettyPrinter:_p_function(fn, indent, content, level)
             params_str = ''
         end
 
-        _insert(content, string.format('function (%s) end', params_str))
+        _insert(context, string.format('function (%s) end', params_str))
     else
         -- cannot parse the fn
-        _insert(content, tostring(fn))
+        _insert(context, tostring(fn))
     end
 
     return false
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_string(str, indent, content, level)
+function PrettyPrinter:_p_string(str, indent, context, level)
     -- compact not need process
     if self._compact == true then
-        _insert(content, str:gsub('\n', '\\n'))
+        local partten = '"%s"'
+        _insert(context, partten:format(str):gsub('\n', '\\n'))
         return true
     end
 
     local str_list = split_string(str, '\n')
     if #str_list == 1 then
-        _insert(content, string.format('"%s"', str_list[1]))
+        _insert(context, string.format('"%s"', str_list[1]))
         return true
     end
 
     local _part_str
-    _insert(content, string.format('"%s\\n"', str_list[1]))
+    _insert(context, string.format('"%s\\n"', str_list[1]))
 
     -- TODO: Performance Testing
     for i = 2, #str_list - 1 do
         -- _part_str = '..\n' .. string.rep(' ', indent) ..
         -- string.format('"%s\\n"', str_list[i])
-        -- _insert(content, _part_str)
+        -- _insert(context, _part_str)
 
-        _insert(content, '..\n')
-        _insert(content, string.rep(' ', indent))
-        _insert(content, string.format('"%s\\n"', str_list[i]))
+        _insert(context, '..\n')
+        _insert(context, string.rep(' ', indent))
+        _insert(context, string.format('"%s\\n"', str_list[i]))
     end
     -- _part_str = '..\n' .. string.rep(' ', indent) ..
     -- string.format('"%s"', str_list[#str_list])
-    -- _insert(content, _part_str)
+    -- _insert(context, _part_str)
 
-    _insert(content, '..\n')
-    _insert(content, string.rep(' ', indent))
-    _insert(content, string.format('"%sn"', str_list[#str_list]))
+    _insert(context, '..\n')
+    _insert(context, string.rep(' ', indent))
+    _insert(context, string.format('"%sn"', str_list[#str_list]))
 
     return true
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_number(num, indent, content, level)
+function PrettyPrinter:_p_number(num, indent, context, level)
     local num_limit = self._number_limit
 
     if self._scientific_notation == true and
         (num > num_limit or num < -num_limit) then
 
-        _insert(content, string.format('%e', num))
+        _insert(context, string.format('%e', num))
         return true
     end
 
-    _insert(content, num)
+    _insert(context, num)
     return true
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_nil(n, indent, content, level)
-    _insert(content, tostring(n))
+function PrettyPrinter:_p_nil(n, indent, context, level)
+    _insert(context, tostring(n))
     return true
 end
 
