@@ -10,7 +10,7 @@
 --- style. And it maintains a good performance as much as possible.
 ---
 local pprint = {
-    _version = '0.1.1'
+    _version = '0.1.2'
 }
 
 -- localization lib

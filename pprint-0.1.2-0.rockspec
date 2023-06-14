@@ -1,8 +1,8 @@
 package = "pprint"
-version = "0.1.1"
+version = "0.1.2"
 source = {
   url = "https://github.com/zlj-zz/pprint.git", -- 用您的GitHub地址替换
-  tag = "v0.1.1", -- 对应源码仓库发布的版本号
+  tag = "v0.1.2", -- 对应源码仓库发布的版本号
 }
 description = {
   summary = "A lua library completes data beautification output.",
