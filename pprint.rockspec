@@ -1,5 +1,5 @@
 package = "pprint"
-version = "0.1.0"
+version = "0.1.1"
 source = {
   url = "https://github.com/zlj-zz/pprint.git", -- 用您的GitHub地址替换
   tag = "v0.1.0", -- 对应源码仓库发布的版本号

@@ -60,6 +60,12 @@ Also, using the library is very simple. It provides several functions:
   }]]
   ```
 
+- `pprint.pp(obj, args?)`
+
+  Print the formatted representation of object to stream with a trailing newline.
+
+  _args_: The options of function. Will be transparently transmitted to `PrettyPrinter`.
+
 - `pprint.pformat(obj, indent?, width?, depth?)`
 
   Return the formatted representation of object as a string.
@@ -111,6 +117,7 @@ The _args_ support some arguments:
 - `args.width`: integer, Attempted maximum number of columns in the output.
 - `args.depth`: integer, Depth limit, exceeding the limit will be folded.
 - `args:compact`: boolean, If true, several items will be combined in one line.
+- `args:sort_tables`: boolean, If true, sort the table by key.
 - `args.scientific_notation`: boolean, If true, will display number with scientific notation.
 
 The _function_ provided:
@@ -119,3 +126,8 @@ The _function_ provided:
 - `PrettyPrinter:pformat(obj)`
 - `PrettyPrinter:isrecursive(obj)`
 - `PrettyPrinter:isreadable(obj)`
+
+# Feature
+
+- Pure lua implementation, no external lib dependencies.
+- Work with lua >=5.2
