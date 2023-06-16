@@ -1,3 +1,5 @@
+local pprint = loadfile('../pprint.lua')()
+
 local unpack = table.unpack
 local fmt = string.format
 
@@ -41,14 +43,14 @@ end
 function bench.run(name, count, func)
   -- Run bench
   local res = {}
-  for i = 1, count do
+  for _ = 1, count do
     local start_time = os.clock()
     func()
     table.insert(res, (os.clock() - start_time))
   end
   -- Calculate average
   local avg = 0
-  for i, v in ipairs(res) do
+  for _, v in ipairs(res) do
     avg = avg + v
   end
   avg = avg / #res
@@ -65,22 +67,30 @@ end
 function bench.run_with_output(name, count, func)
     print(string.rep('-', 30))
     print(fmt('[%s] run ...', name))
+
     local res = bench.run(name, count, func)
     print('over')
+
+    pprint.pprint(res)
     return res
 end
 
 
 ------- fake -----------------------------------
 
-local function generate_large_nested_table(rows, cols)
+local function generate_large_nested_table(rows, cols, with_str)
+    with_str = with_str == true
+
     local t = {}
 
     for r = 1, rows do
         local row = {}
         for c = 1, cols do
-            --table.insert(row, (r - 1) * cols + c)
-            table.insert(row, '12345\n12345\n12345\n12345\n12345')
+            if with_str then
+                table.insert(row, '12345\n12345\n12345\n12345\n12345')
+            else
+                table.insert(row, (r - 1) * cols + c)
+            end
         end
         table.insert(t, row)
     end
@@ -104,49 +114,43 @@ end
 ------- ready -----------------------------------
 bench.print_system_info()
 
-local pprint = loadfile('../pprint.lua')()
 
-local bench_tb, bench_res
+local bench_tb
 
-bench_tb = generate_large_nested_table(1000, 1000)
-print('Generate bench table over, 1000 x 1000.')
+bench_tb = generate_large_nested_table(500, 500, true)
+print('Generate bench table over, 500 x 500.')
+print('** the key is multi line stirng x 5.')
 
 
-bench_res = bench.run_with_output('PrettyPrinter:_format', 10, function ()
+bench.run_with_output('PrettyPrinter:_format', 10, function ()
     pprint.PrettyPrinter():_format(bench_tb, 0, {}, 0)
 end)
-pprint.pprint(bench_res)
 
 
-bench_res = bench.run_with_output('PrettyPrinter:pformat', 10, function ()
+bench.run_with_output('PrettyPrinter:pformat', 10, function ()
     pprint.PrettyPrinter():pformat(bench_tb)
 end)
-pprint.pprint(bench_res)
 
 
-bench_res = bench.run_with_output('PrettyPrinter:pformat:compact', 10, function ()
+bench.run_with_output('PrettyPrinter:pformat:compact', 10, function ()
     pprint.PrettyPrinter({compact=true}):pformat(bench_tb)
 end)
-pprint.pprint(bench_res)
 
 
 bench_tb = generate_large_depth_table(5000)
 print('Generate bench table over, depth 5000.')
 
 
-bench_res = bench.run_with_output('PrettyPrinter:_format', 10, function ()
+bench.run_with_output('PrettyPrinter:_format', 10, function ()
     pprint.PrettyPrinter():_format(bench_tb, 0, {}, 0)
 end)
-pprint.pprint(bench_res)
 
 
-bench_res = bench.run_with_output('PrettyPrinter:pformat', 10, function ()
+bench.run_with_output('PrettyPrinter:pformat', 10, function ()
     pprint.PrettyPrinter():pformat(bench_tb)
 end)
-pprint.pprint(bench_res)
 
 
-bench_res = bench.run_with_output('PrettyPrinter:pformat:compact', 10, function ()
+bench.run_with_output('PrettyPrinter:pformat:compact', 10, function ()
     pprint.PrettyPrinter({compact=true}):pformat(bench_tb)
 end)
-pprint.pprint(bench_res)
