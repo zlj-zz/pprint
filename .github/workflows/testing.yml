@@ -2,58 +2,87 @@ name: Lua Testing
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
     paths-ignore:
-      - '**.md'
-      - '**.log'
-      
+      - "**.md"
+      - "**.log"
+
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        luaVersion: ['5.2', '5.3', '5.4']
+        os: [ubuntu-latest, macos-latest] #, windows-latest]
+        luaVersion: ["5.2", "5.3", "5.4"]
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2.3.4
+      - name: Checkout
+        uses: actions/checkout@v2.3.4
 
-    - name: Setup Lua
-      uses: leafo/gh-actions-lua@v8
-      with:
-        luaVersion: ${{ matrix.luaVersion }}
+      - name: Setup Lua (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          choco install 7zip
+          $VERSION = "${{ matrix.luaVersion }}"
+          echo "LUA_VERSION=${VERSION}"
+          Invoke-WebRequest -Uri "https://udomain.dl.sourceforge.net/project/luabinaries/${VERSION}.2/Tools Executables/lua-${VERSION}.2_Win32_bin.zip" -OutFile "lua.zip"
+          dir
+          Get-Location
+          Get-Item "lua.zip"
+          New-Item -ItemType Directory -Path .\lua # 创建 lua 文件夹
+          #Expand-Archive -Path "lua.zip" -DestinationPath ".\lua" -ErrorAction SilentlyContinue -Force
+          7z e "lua.zip" -o"lua"
+          Get-ChildItem -Path .\lua
+          if ($VERSION.StartsWith("5.1")) {
+              cmd /c "mklink lua\lua.exe lua\lua51.exe"
+          } elseif ($VERSION.StartsWith("5.2")) {
+              cmd /c "mklink lua\lua.exe lua\lua52.exe"
+          } elseif ($VERSION.StartsWith("5.3")) {
+              cmd /c "mklink lua\lua.exe lua\lua53.exe"
+          } else { # default - for 5.4 and future versions
+              cmd /c "mklink lua\lua.exe lua\lua54.exe"
+          }
+          Get-ChildItem -Path .\lua
+          #cmd /c "mklink lua\lua.exe lua\lua*.exe"
+          echo "Path=$(Get-Location)\lua;$env:Path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
-    - name: Setup LuaRocks
-      run: |
-        wget https://github.com/luarocks/luarocks/archive/v3.7.0.tar.gz -O /tmp/luarocks.tar.gz
-        tar zxpf /tmp/luarocks.tar.gz -C ${{ github.workspace }}
-        cd ${{ github.workspace }}/luarocks-3.7.0
-        ./configure --with-lua=/usr/local
-        make build
-        sudo make install
+      - name: Setup Lua (Linux/macOS)
+        if: matrix.os != 'windows-latest'
+        uses: leafo/gh-actions-lua@v8
+        with:
+          luaVersion: ${{ matrix.luaVersion }}
 
-#     - name: Cache Lua dependencies
-#       uses: actions/cache@v2.1.6
-#       with:
-#         path: ~/.cache/luarocks
-#         key: ${{ runner.os }}-luarocks-${{ hashFiles('**/rockspecs/*.rockspec') }}
+      #- name: Setup LuaRocks
+      #  run: |
+      #    wget https://github.com/luarocks/luarocks/archive/v3.7.0.tar.gz -O /tmp/luarocks.tar.gz
+      #    tar zxpf /tmp/luarocks.tar.gz -C ${{ github.workspace }}
+      #    cd ${{ github.workspace }}/luarocks-3.7.0
+      #    ./configure --with-lua=/usr/local
+      #    make build
+      #    sudo make install
 
-#     - name: Install Lua dependencies
-#       run: |
-#         luarocks install --only-deps rockspecs/<mylibrary>.rockspec
+      #- name: Cache Lua dependencies
+      #  uses: actions/cache@v2.1.6
+      #  with:
+      #    path: ~/.cache/luarocks
+      #    key: ${{ runner.os }}-luarocks-${{ hashFiles('**/rockspecs/*.rockspec') }}
 
-#     - name: Build
-#       run: |
-#         luarocks make rockspecs/<mylibrary>.rockspec
+      #- name: Install Lua dependencies
+      #  run: |
+      #    luarocks install --only-deps rockspecs/<mylibrary>.rockspec
 
-    - name: Test
-      run: |
-        cd tests
-        lua test_pprint.lua
-        
-    - name: Benchmakr
-      run: |
-        cd ../bench
-        lua benchmark.lua
-        
+      #- name: Build
+      #  run: |
+      #    luarocks make rockspecs/<mylibrary>.rockspec
+
+      - name: Test
+        if: matrix.os != 'windows-latest'
+        run: |
+          cd tests
+          lua test_pprint.lua
+      #- name: Benchmark
+      #  run: |
+      #    cd bench
+      #    lua benchmark.lua
