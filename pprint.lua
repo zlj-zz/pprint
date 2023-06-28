@@ -14,6 +14,22 @@ local pprint = {
     _version = '0.1.2'
 }
 
+-- const vals
+local symbol = {
+    EMPTY = '',
+    SPACE = ' ',
+    WRAP = '\n',
+    VAL_END = ',',
+    VAL_END_WITH_WRAP = ',\n',
+    VAL_END_WITH_SPACE = ', ',
+    TABLE_START = '{',
+    TABLE_START_WITH_WRAP = '{\n',
+    TABLE_END = '}',
+    TABLE_END_WITH_WRAP = '}\n',
+    TABLE_EMPTY = '{ }',
+    TABLE_HIDE = '{...}'
+}
+
 -- localization lib then more faster
 local string = string
 local _concat = table.concat
@@ -23,7 +39,7 @@ local _insert = function(tb, val)
 end
 
 --- Adjust a table whether is a list.
----@param tb table @A table that maybe list 
+---@param tb table @A table that maybe list
 ---@return boolean
 local function is_table_list(tb)
     local i = 1
@@ -65,7 +81,7 @@ local function split_string(input, delimiter)
     end
 
     -- has default delimiter
-    delimiter = delimiter or '\n'
+    delimiter = delimiter or symbol.WRAP
 
     for match in string.gmatch(input .. delimiter, split_string_pattern:format(
         delimiter, delimiter)) do
@@ -224,19 +240,20 @@ end
 function PrettyPrinter:_p_table(tb, indent, context, level)
     -- whether empty table
     if is_table_empty(tb) then
-        _insert(context, '{ }')
+        _insert(context, symbol.TABLE_EMPTY)
         return true
     end
 
     -- whether depth than max level
     if self._depth ~= nil and level >= self._depth then
-        _insert(context, '{...}')
+        _insert(context, symbol.TABLE_HIDE)
         return false
     end
 
-    local start_symbol, indent_space = '{\n', string.rep(' ', indent)
+    local start_symbol, indent_space = symbol.TABLE_START_WITH_WRAP,
+        string.rep(symbol.SPACE, indent)
     if self._compact == true then
-        start_symbol, indent_space = '{', ' '
+        start_symbol, indent_space = symbol.TABLE_START, symbol.SPACE
     end
 
     _insert(context, start_symbol)
@@ -252,9 +269,9 @@ function PrettyPrinter:_p_table(tb, indent, context, level)
     end
 
     _insert(context, indent_space)
-    _insert(context, '}')
+    _insert(context, symbol.TABLE_END)
     if level <= 1 and self._compact ~= true then
-        _insert(context, '\n')
+        _insert(context, symbol.WRAP)
     end
 
     return _isreadable
@@ -265,9 +282,10 @@ function PrettyPrinter:_p_t_map(map, indent, context, level)
     local k_isreadable = true
     local v_isreadable = true
 
-    local item_end_symbol, indent_space = ',\n', string.rep(' ', indent)
+    local item_end_symbol, indent_space = symbol.VAL_END_WITH_WRAP,
+        string.rep(symbol.SPACE, indent)
     if self._compact == true then
-        item_end_symbol, indent_space = ',', ' '
+        item_end_symbol, indent_space = symbol.VAL_END, symbol.SPACE
     end
 
     local keys = map -- default
@@ -296,9 +314,17 @@ function PrettyPrinter:_p_t_map(map, indent, context, level)
         v_isreadable = self:_format(v, indent + repr_len, context, level) and
                            v_isreadable
 
-        _insert(context, item_end_symbol)
-
         k, idx = self:_map_next_k(keys, idx)
+
+        -- not last key
+        if k ~= nil then
+            _insert(context, item_end_symbol)
+        else
+            -- last key and not self._compact need wrap
+            if self._compact ~= true then
+                _insert(context, symbol.WRAP)
+            end
+        end
     end
 
     return k_isreadable and v_isreadable
@@ -328,7 +354,7 @@ function PrettyPrinter:_p_table_key(key, context)
     end
 
     local key_repr
-    local isreadable = true
+    local _isreadable = true
 
     if k_typ == '_number' or k_typ == '_boolean' or k_typ == '_nil' then
         key_repr = _format('[%s] = ')
@@ -336,21 +362,22 @@ function PrettyPrinter:_p_table_key(key, context)
         key_repr = _format('["%s"] = ')
     else
         key_repr = _format('%s = ')
-        isreadable = false
+        _isreadable = false
     end
 
     _insert(context, key_repr)
 
-    return #key_repr, isreadable
+    return #key_repr, _isreadable
 end
 
 ---@return boolean @isreadable
 function PrettyPrinter:_p_t_list(lis, indent, context, level)
     local _isreadable = true
 
-    local item_end_symbol, indent_space = ',\n', string.rep(' ', indent)
+    local item_end_symbol, indent_space = symbol.VAL_END_WITH_WRAP,
+        string.rep(symbol.SPACE, indent)
     if self._compact == true then
-        item_end_symbol, indent_space = ',', ' '
+        item_end_symbol, indent_space = symbol.VAL_END, symbol.SPACE
     end
 
     for i = 1, #lis - 1 do
@@ -364,7 +391,7 @@ function PrettyPrinter:_p_t_list(lis, indent, context, level)
     _isreadable = self:_format(lis[#lis], indent, context, level) and
                       _isreadable
     if self._compact ~= true then
-        _insert(context, '\n')
+        _insert(context, symbol.WRAP)
     end
 
     return _isreadable
@@ -471,6 +498,8 @@ PrettyPrinter._dispatch = {
 -------------------------------------------------------------------------------
 -- pprint
 -------------------------------------------------------------------------------
+pprint.symbol = symbol
+
 pprint.PrettyPrinter = PrettyPrinter
 
 --- Print the formatted representation of object to stream with a
@@ -504,7 +533,7 @@ end
 ---@param indent? integer
 ---@param width? integer
 ---@param depth? integer
----@return string @formating string of obj
+---@return string @formatting string of obj
 pprint.pformat = function(obj, indent, width, depth)
     local args = {
         indent = indent,

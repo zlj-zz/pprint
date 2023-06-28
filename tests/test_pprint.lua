@@ -125,7 +125,7 @@ end)
 captured:test('PrettyPrinter.pprint:depth', function()
     local printer = pprint.PrettyPrinter({
         depth = 3,
-        --sort_tables = true,
+        sort_tables = true,
         scientific_notation = true
     })
 
