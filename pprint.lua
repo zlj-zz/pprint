@@ -9,11 +9,12 @@
 --- string, and also provides a series of parameters to adjust the formatting
 --- style. And it maintains a good performance as much as possible.
 ---
+---@package
 local pprint = {
     _version = '0.1.2'
 }
 
--- localization lib
+-- localization lib then more faster
 local string = string
 local _concat = table.concat
 -- preferred over table.insert due to better performance on PUC Lua.
@@ -22,12 +23,12 @@ local _insert = function(tb, val)
 end
 
 --- Adjust a table whether is a list.
----@param t table
+---@param tb table @A table that maybe list 
 ---@return boolean
-local function is_table_list(t)
+local function is_table_list(tb)
     local i = 1
-    for k in pairs(t) do
-        if t[i] == nil then
+    for k in pairs(tb) do
+        if tb[i] == nil then
             return false
         end
 
@@ -41,10 +42,10 @@ local function is_table_list(t)
 end
 
 --- Adjust a table whether empty.
----@param t table
+---@param tb table
 ---@return boolean
-local function is_table_empty(t)
-    return next(t) == nil
+local function is_table_empty(tb)
+    return next(tb) == nil
 end
 
 local split_string_pattern = '([^%s]*)%s'
@@ -55,8 +56,8 @@ local split_string_pattern = '([^%s]*)%s'
 ---     '123\n\n' -> {"123","","",}
 ---     '123\n123\n123' -> {"123","123","123"}
 ---@param input string
----@param delimiter? string
----@return table
+---@param delimiter? string @default: \n
+---@return table @split result
 local function split_string(input, delimiter)
     local result = {}
     if input == nil then
@@ -75,7 +76,7 @@ local function split_string(input, delimiter)
 end
 
 --- Help to create a class.
----@param baseClass any
+---@param baseClass? table
 ---@return table
 local function class(baseClass)
     local newClass = {}
@@ -87,6 +88,7 @@ local function class(baseClass)
         end
         return instance
     end
+
     if baseClass then
         setmetatable(newClass, baseClass)
     else
@@ -94,6 +96,7 @@ local function class(baseClass)
             __call = newClass.__call
         })
     end
+
     return newClass
 end
 
@@ -111,7 +114,9 @@ local _no_isrecursive_type = {
 
 ---@class PrettyPrinter
 ---@field pprint fun(self, obj):nil
----@field pformat fun(self, obj):nil
+---@field pformat fun(self, obj):string
+---@field isreadable fun(self, obj):boolean
+---@field isrecursive fun(self, obj):boolean
 local PrettyPrinter = class()
 
 ---New function will be auto called when create `PrettyPrinter` instance.
@@ -186,7 +191,6 @@ function PrettyPrinter:_to_assemble(context)
     return _concat(context)
 end
 
----
 ---@param obj any
 ---@param indent integer
 ---@param context table
@@ -208,9 +212,9 @@ function PrettyPrinter:_format(obj, indent, context, level)
 end
 
 ---Check a type of object.
----Would return: (nil, boolean, number, string, function, table, list) and startwith '_'.
+---Would return: (_nil, _boolean, _number, _string, _function, _table)
 ---@param obj any
----@return string
+---@return string @type
 function PrettyPrinter:_match_type(obj)
     local o_typ = type(obj)
     return '_' .. o_typ
@@ -282,7 +286,6 @@ function PrettyPrinter:_p_t_map(map, indent, context, level)
     local v
 
     while k ~= nil do
-        -- for k, v in pairs(map) do
         v = map[k]
 
         _insert(context, indent_space)
@@ -417,22 +420,13 @@ function PrettyPrinter:_p_string(str, indent, context, level)
         return true
     end
 
-    local _part_str
     _insert(context, string.format('"%s\\n"', str_list[1]))
 
-    -- TODO: Performance Testing
     for i = 2, #str_list - 1 do
-        -- _part_str = '..\n' .. string.rep(' ', indent) ..
-        -- string.format('"%s\\n"', str_list[i])
-        -- _insert(context, _part_str)
-
         _insert(context, '..\n')
         _insert(context, string.rep(' ', indent))
         _insert(context, string.format('"%s\\n"', str_list[i]))
     end
-    -- _part_str = '..\n' .. string.rep(' ', indent) ..
-    -- string.format('"%s"', str_list[#str_list])
-    -- _insert(context, _part_str)
 
     _insert(context, '..\n')
     _insert(context, string.rep(' ', indent))
@@ -464,6 +458,7 @@ end
 
 --- Used to obtain the formatting methods corresponding to different data types.
 --- The type of (nil, number) not needed.
+---@type table<string, fun(...)>
 PrettyPrinter._dispatch = {
     _table = PrettyPrinter._p_table,
     _function = PrettyPrinter._p_function,
@@ -509,6 +504,7 @@ end
 ---@param indent? integer
 ---@param width? integer
 ---@param depth? integer
+---@return string @formating string of obj
 pprint.pformat = function(obj, indent, width, depth)
     local args = {
         indent = indent,
