@@ -3,7 +3,7 @@ local fmt = string.format
 local captured = {
     o_print = print,
     c_name = 'nil',
-    c_output = {},
+    c_output = {}
 }
 
 function captured:pour()
@@ -25,11 +25,11 @@ function captured:hijack_print(name)
 
     -- redefine global print
     function print(...)
-        --local level = 2
-        --local info = debug.getinfo(level, "n")
-        --local caller = info.name or "unknown"
+        -- local level = 2
+        -- local info = debug.getinfo(level, "n")
+        -- local caller = info.name or "unknown"
 
-        local output = { ... }
+        local output = {...}
         table.insert(self.c_output, {
             caller = self.c_name,
             content = table.concat(output, "\t")
@@ -44,20 +44,18 @@ end
 
 function captured:test(name, func)
     self:hijack_print(name)
-    xpcall(
-        function()
-            func()
-            self.o_print(fmt("[pass] %s", name))
-        end,
-        function(err)
-            self.o_print(fmt("[fail] %s : %s", name, err))
-        end)
+    xpcall(function()
+        func()
+        self.o_print(fmt("[pass] %s", name))
+    end, function(err)
+        self.o_print(fmt("[fail] %s : %s", name, err))
+    end)
     self:unhijack_print()
 end
 
 ------- ready -----------------------------------
 
-local a_list = { '1', '2', '3\n4' }
+local a_list = {'1', '2', '3\n4'}
 
 local say = function(msg)
     print('say: ' .. msg)
@@ -69,12 +67,12 @@ local person = {
     parent = nil,
     hobbys = {
         'game',
-        ['ball'] = { 'football', 'basketball' }
+        ['ball'] = {'football', 'basketball'}
     },
-    actions = { 'sit', 'walk', 'run', say },
+    actions = {'sit', 'walk', 'run', say},
     2 ^ 26, -- a big number
-    list = a_list,
-    {}
+    str_list = a_list,
+    num_list = {1, 2, 3, 100}
 }
 
 function person.intro()
@@ -88,7 +86,7 @@ captured:test('PrettyPrinter:isrecursive', function()
     assert(pprint.PrettyPrinter:isrecursive('string') == false)
     assert(pprint.PrettyPrinter:isrecursive(123) == false)
     assert(pprint.PrettyPrinter:isrecursive(false) == false)
-    assert(pprint.PrettyPrinter:isrecursive({ 'a', 'b' }) == true)
+    assert(pprint.PrettyPrinter:isrecursive({'a', 'b'}) == true)
 end)
 
 captured:test('PrettyPrinter:isreadable', function()
@@ -101,7 +99,7 @@ captured:test('PrettyPrinter:isreadable', function()
     assert(pprint.PrettyPrinter():isreadable('a') == true)
     assert(pprint.PrettyPrinter():isreadable(nil) == true)
 
-    assert(pprint.PrettyPrinter():isreadable({ 1, 2, 3 }) == true)
+    assert(pprint.PrettyPrinter():isreadable({1, 2, 3}) == true)
 
     assert(pprint.PrettyPrinter():isreadable({
         abc = function(...)
@@ -126,10 +124,23 @@ captured:test('PrettyPrinter.pprint:depth', function()
     local printer = pprint.PrettyPrinter({
         depth = 3,
         sort_tables = true,
-        scientific_notation = true
+        scientific_notation = true,
+        color = true
     })
 
     printer:pprint(person)
+end)
+
+captured:test('PrettyPrinter.pprint:color', function()
+    local printer = pprint.PrettyPrinter({
+        color = true
+    })
+
+    printer:pprint(nil)
+    local t = {1, 2, 3}
+    printer:pprint({
+        [t] = 1
+    })
 end)
 
 captured:test('PrettyPrinter.pprint', function()
@@ -140,9 +151,10 @@ captured:test('PrettyPrinter.pprint', function()
         tmp = tmp.key
     end
 
-    pprint.PrettyPrinter({ depth = 6 }):pprint(tb)
+    pprint.PrettyPrinter({
+        depth = 6
+    }):pprint(tb)
 end)
-
 
 ------- last ------------------------------------
 captured:pour()
