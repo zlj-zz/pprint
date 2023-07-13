@@ -363,11 +363,10 @@ end
 ---@return boolean @isreadable
 ---@return integer @Len of the key need used
 function PrettyPrinter:_p_table_key(key, context)
-    local k_typ = self:_match_type(key)
-
-    local f_key
-    local f_key_len
+    local f_key, f_key_len
     local _isreadable
+
+    local k_typ = self:_match_type(key)
 
     _insert(context, '[')
     if k_typ == '_table' then -- not process key type of 'table'
@@ -412,7 +411,10 @@ function PrettyPrinter:_p_t_list(lis, indent, context, level)
 end
 
 ---@return boolean @isreadable
+---@return integer @length of func string
 function PrettyPrinter:_p_function(fn, indent, context, level)
+    local f_fn, f_fn_len
+
     local fn_info = debug.getinfo(fn)
     local params = {}
 
@@ -437,25 +439,30 @@ function PrettyPrinter:_p_function(fn, indent, context, level)
             params_str = ''
         end
 
-        local f_str = string.format('function (%s) end', params_str)
+        f_fn = string.format('function (%s) end', params_str)
+        f_fn_len = #f_fn
+
         if self._color then
-            f_str = color.render(f_str, color.FUNC)
+            f_fn = color.render(f_fn, color.FUNC)
         end
 
-        _insert(context, f_str)
+        _insert(context, f_fn)
     else
         -- cannot parse the fn
-        _insert(context, tostring(fn))
+        f_fn = tostring(fn)
+        f_fn_len = #f_fn
+
+        _insert(context, f_fn)
     end
 
-    return false
+    return false, f_fn_len
 end
 
 ---@return boolean @isreadable
 ---@return integer @length
 function PrettyPrinter:_p_string(str, indent, context, level)
-    local f_str
-    local f_str_len
+    local f_str, f_str_len
+
     local partten = '"%s"'
 
     -- compact not need process, ouput with one-line.
@@ -522,10 +529,9 @@ end
 ---@return boolean @isreadable
 ---@return integer @length of num
 function PrettyPrinter:_p_number(num, indent, context, level)
-    local num_limit = self._number_limit
+    local f_num, f_num_len
 
-    local f_num
-    local f_num_len
+    local num_limit = self._number_limit
     local isreadable = true
 
     if self._scientific_notation == true and

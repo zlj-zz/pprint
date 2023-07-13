@@ -138,8 +138,12 @@ captured:test('PrettyPrinter.pprint:color', function()
 
     printer:pprint(nil)
     local t = {1, 2, 3}
+    local f = function()
+        --
+    end
     printer:pprint({
-        [t] = 1
+        [t] = 1,
+        [f] = 2
     })
 end)
 
