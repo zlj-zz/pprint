@@ -34,31 +34,20 @@ Also, using the library is very simple. It provides several functions:
 
   ```lua
   local test_struct = {
-    ['name'] = 'Tom',
-    age = 18,
-    hobbys = {
-        'game',
-        ['ball'] = {
-            'football',
-            'basketball'
-        }
-    },
+      ['name'] = 'Tom',
+      age = 18,
+      hobbys = {
+          'game',
+          ['ball'] = {'football', 'basketball'}
+      },
+      eat = function(food)
+          print('I eat: ' .. food)
+      end
   }
   pprint.pprint(test_struct)
-
-  --[[Output:
-  {
-    [name] = "Tom",
-    [age] = 18,
-    [hobbys] = {
-                 [1] = "game",
-                 [ball] = {
-                            "football",
-                            "basketball",
-                          },
-               },
-  }]]
   ```
+
+  ![demo](./demo1.png)
 
 - `pprint.pp(obj, args?)`
 
