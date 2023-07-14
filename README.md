@@ -24,7 +24,7 @@ Also, using the library is very simple. It provides several functions:
 
 - `pprint.pprint(obj, indent?, width?, depth?)`
 
-  Print the formatted representation of object to stream with a trailing newline.
+  Print the formatted representation of object with color to stream with a trailing newline.
 
   _indent_: indent of each level
 
@@ -92,7 +92,7 @@ Also, using the library is very simple. It provides several functions:
 
 # Source
 
-The _pprint_ libray define a class:
+The _pprint_ library define a class:
 `pprint.PrettyPrinter(args)`
 
 ```lua
@@ -108,6 +108,7 @@ The _args_ support some arguments:
 - `args:compact`: boolean, If true, several items will be combined in one line.
 - `args:sort_tables`: boolean, If true, sort the table by key.
 - `args.scientific_notation`: boolean, If true, will display number with scientific notation.
+- `args.color`: boolean, If true, will format with color escape.
 
 The _function_ provided:
 
@@ -119,4 +120,5 @@ The _function_ provided:
 # Feature
 
 - Pure lua implementation, no external lib dependencies.
+- Support color output.
 - Work with lua >=5.2
