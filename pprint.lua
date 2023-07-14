@@ -11,7 +11,7 @@
 ---
 ---@package
 local pprint = {
-    _version = '0.1.2'
+    _version = '0.2.0'
 }
 
 -- const vals
