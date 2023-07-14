@@ -52,7 +52,7 @@ end
 -----------------------run--------------------------
 print(color:escape_by_hex('#2ecc71')) -- string color
 print(color:escape_by_hex('#3498db')) -- number color
-print(color:escape_by_hex('#ff7f50')) -- func color
+print(color:escape_by_hex('#a6559d')) -- func color
 print(color:escape_by_hex('#e74c3c')) -- nil color
 
 print('\x1b[38;2;46;204;113m hello world \x1b[m')

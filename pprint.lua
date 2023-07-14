@@ -33,7 +33,7 @@ local symbol = {
 local color = {
     STRING = '\x1b[38;2;46;204;113m',
     NUMBER = '\x1b[38;2;52;152;219m',
-    FUNC = '\x1b[38;2;255;127;80m',
+    FUNC = '\x1b[38;2;166;85;157m',
     NIL = '\x1b[38;2;231;76;60m',
     END = '\x1b[0m'
 }
