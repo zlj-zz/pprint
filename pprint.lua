@@ -41,7 +41,7 @@ local color = {
 --- render string with color escape.
 ---@param str string
 ---@param escape string
----@return string
+---@return string @str with color escape
 function color.render(str, escape)
     return string.format('%s%s%s', escape, str, color.END)
 end
@@ -152,7 +152,7 @@ local _no_isrecursive_type = {
 local PrettyPrinter = class()
 
 ---New function will be auto called when create `PrettyPrinter` instance.
----@param args? table
+---@param args? table<string,any>
 ---       args.indent integer @Number of spaces to indent for each level of nesting.
 ---       args.width integer @Attempted maximum number of columns in the output.
 ---       args.depth integer @Depth limit, exceeding the limit will be folded.
@@ -195,7 +195,7 @@ end
 ---@param obj any
 ---@return boolean
 function PrettyPrinter:isreadable(obj)
-    return self:_format(obj, 0, {}, 0)
+    return self:_format(obj, 0, {}, 0) and not self._color
 end
 
 --- Print the formatted representation of object to stream with a
@@ -227,20 +227,20 @@ end
 
 ---@param obj any
 ---@param indent integer
----@param context table
----@param level integer
+---@param ctx table @save the result context
+---@param level integer @current depth level
 ---@return boolean @isreadable
-function PrettyPrinter:_format(obj, indent, context, level)
+function PrettyPrinter:_format(obj, indent, ctx, level)
     local o_typ = self:_match_type(obj)
 
     ---@type fun(...):boolean @Corresponding type of processing function
-    local p_fn = self._dispatch[o_typ]
+    local process_fn = self._dispatch[o_typ]
 
-    if p_fn ~= nil then
+    if process_fn ~= nil then
         -- onlu plus level here, if recursively will recall `_format`
-        return p_fn(self, obj, indent, context, level + 1)
+        return process_fn(self, obj, indent, ctx, level + 1)
     else
-        _insert(context, tostring(obj))
+        _insert(ctx, tostring(obj))
         return false
     end
 end
@@ -255,16 +255,16 @@ function PrettyPrinter:_match_type(obj)
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_table(tb, indent, context, level)
+function PrettyPrinter:_p_table(tb, indent, ctx, level)
     -- whether empty table
     if is_table_empty(tb) then
-        _insert(context, symbol.TABLE_EMPTY)
+        _insert(ctx, symbol.TABLE_EMPTY)
         return true
     end
 
     -- whether depth than max level
     if self._depth ~= nil and level >= self._depth then
-        _insert(context, symbol.TABLE_HIDE)
+        _insert(ctx, symbol.TABLE_HIDE)
         return false
     end
 
@@ -274,26 +274,25 @@ function PrettyPrinter:_p_table(tb, indent, context, level)
         start_symbol, indent_space = symbol.TABLE_START, symbol.SPACE
     end
 
-    _insert(context, start_symbol)
+    _insert(ctx, start_symbol)
 
     local next_indent = indent + self._per_level_sp
     local _isreadable
 
-    local _is_list = is_table_list(tb)
-    if _is_list then
-        _isreadable = self:_p_t_list(tb, next_indent, context, level)
+    if is_table_list(tb) then
+        _isreadable = self:_p_t_list(tb, next_indent, ctx, level)
     else
-        _isreadable = self:_p_t_map(tb, next_indent, context, level)
+        _isreadable = self:_p_t_map(tb, next_indent, ctx, level)
     end
 
-    _insert(context, indent_space)
-    _insert(context, symbol.TABLE_END)
+    _insert(ctx, indent_space)
+    _insert(ctx, symbol.TABLE_END)
 
     return _isreadable
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_t_map(map, indent, context, level)
+function PrettyPrinter:_p_t_map(map, indent, ctx, level)
     local k_isreadable = true
     local v_isreadable = true
 
@@ -306,38 +305,39 @@ function PrettyPrinter:_p_t_map(map, indent, context, level)
     local keys = map -- default
     if self._sort_tables == true then
         keys = {}
+
         for k, _ in pairs(map) do
             _insert(keys, k)
-            table.sort(keys, function(a, b)
-                return tostring(a) < tostring(b)
-            end)
         end
+        table.sort(keys, function(a, b)
+            return tostring(a) < tostring(b)
+        end)
 
     end
 
-    local k, idx = self:_map_next_k(keys, nil)
+    local k, idx = self:_map_next(keys, nil)
     local v
 
     while k ~= nil do
         v = map[k]
 
-        _insert(context, indent_space)
+        _insert(ctx, indent_space)
 
-        local _k_isreadable, repr_len = self:_p_table_key(k, context)
+        local _k_isreadable, repr_len = self:_p_table_key(k, ctx)
         k_isreadable = _k_isreadable and k_isreadable
 
-        v_isreadable = self:_format(v, indent + repr_len, context, level) and
+        v_isreadable = self:_format(v, indent + repr_len, ctx, level) and
                            v_isreadable
 
-        k, idx = self:_map_next_k(keys, idx)
+        k, idx = self:_map_next(keys, idx)
 
         -- not last key
         if k ~= nil then
-            _insert(context, item_end_symbol)
+            _insert(ctx, item_end_symbol)
         else
             -- last key and not self._compact need wrap
             if self._compact ~= true then
-                _insert(context, symbol.WRAP)
+                _insert(ctx, symbol.WRAP)
             end
         end
     end
@@ -348,8 +348,8 @@ end
 --- Get the key and next index of table.
 ---@param tb table
 ---@param index any
----@return any, any
-function PrettyPrinter:_map_next_k(tb, index)
+---@return any, any @key, cur index
+function PrettyPrinter:_map_next(tb, index)
     local k, v = next(tb, index)
 
     if self._sort_tables == true then
@@ -361,31 +361,32 @@ end
 
 --- Format the key of map.
 ---@return boolean @isreadable
----@return integer @Len of the key need used
-function PrettyPrinter:_p_table_key(key, context)
+---@return integer @len of the key need used
+function PrettyPrinter:_p_table_key(key, ctx)
     local f_key, f_key_len
-    local _isreadable
+    local isreadable
 
     local k_typ = self:_match_type(key)
 
-    _insert(context, '[')
+    _insert(ctx, '[')
     if k_typ == '_table' then -- not process key type of 'table'
+        isreadable = false
+
         f_key = tostring(key)
         f_key_len = #f_key
 
-        _insert(context, f_key)
-        _isreadable = false
+        _insert(ctx, f_key)
     else
-        _isreadable, f_key_len = self:_format(key, 0, context, 0)
+        isreadable, f_key_len = self:_format(key, 0, ctx, 0)
     end
-    _insert(context, '] = ')
+    _insert(ctx, '] = ')
 
-    return _isreadable, f_key_len + 5
+    return isreadable, f_key_len + 5
 end
 
 ---@return boolean @isreadable
-function PrettyPrinter:_p_t_list(lis, indent, context, level)
-    local _isreadable = true
+function PrettyPrinter:_p_t_list(lis, indent, ctx, level)
+    local isreadable = true
 
     local item_end_symbol, indent_space = symbol.VAL_END_WITH_WRAP,
         string.rep(symbol.SPACE, indent)
@@ -393,26 +394,25 @@ function PrettyPrinter:_p_t_list(lis, indent, context, level)
         item_end_symbol, indent_space = symbol.VAL_END, symbol.SPACE
     end
 
+    ---TODO: while may more simple.
     for i = 1, #lis - 1 do
-        _insert(context, indent_space)
-        _isreadable = self:_format(lis[i], indent, context, level) and
-                          _isreadable
-        _insert(context, item_end_symbol)
+        _insert(ctx, indent_space)
+        isreadable = self:_format(lis[i], indent, ctx, level) and isreadable
+        _insert(ctx, item_end_symbol)
     end
 
-    _insert(context, indent_space)
-    _isreadable = self:_format(lis[#lis], indent, context, level) and
-                      _isreadable
+    _insert(ctx, indent_space)
+    isreadable = self:_format(lis[#lis], indent, ctx, level) and isreadable
     if self._compact ~= true then
-        _insert(context, symbol.WRAP)
+        _insert(ctx, symbol.WRAP)
     end
 
-    return _isreadable
+    return isreadable
 end
 
 ---@return boolean @isreadable
 ---@return integer @length of func string
-function PrettyPrinter:_p_function(fn, indent, context, level)
+function PrettyPrinter:_p_function(fn, _, ctx, _)
     local f_fn, f_fn_len
 
     local fn_info = debug.getinfo(fn)
@@ -420,23 +420,22 @@ function PrettyPrinter:_p_function(fn, indent, context, level)
 
     -- IMPROVE: cannot get function name
     if fn_info.what == 'Lua' then
-        local idx = 1
+        local i = 1
 
         while true do
-            local param_name = debug.getlocal(fn, idx)
+            local param_name = debug.getlocal(fn, i)
+
             if param_name then
                 _insert(params, param_name)
-                idx = 1 + idx
+                i = 1 + i
             else
                 break
             end
         end
 
-        local params_str
+        local params_str = ''
         if #params > 0 then
             params_str = _concat(params, ', ')
-        else
-            params_str = ''
         end
 
         f_fn = string.format('function (%s) end', params_str)
@@ -446,13 +445,13 @@ function PrettyPrinter:_p_function(fn, indent, context, level)
             f_fn = color.render(f_fn, color.FUNC)
         end
 
-        _insert(context, f_fn)
+        _insert(ctx, f_fn)
     else
         -- cannot parse the fn
         f_fn = tostring(fn)
         f_fn_len = #f_fn
 
-        _insert(context, f_fn)
+        _insert(ctx, f_fn)
     end
 
     return false, f_fn_len
@@ -460,21 +459,26 @@ end
 
 ---@return boolean @isreadable
 ---@return integer @length
-function PrettyPrinter:_p_string(str, indent, context, level)
+function PrettyPrinter:_p_string(str, indent, ctx, level)
     local f_str, f_str_len
 
     local partten = '"%s"'
+
+    --- help to insert ctx, if need color
+    local function _color_insert(s)
+        if self._color then
+            s = color.render(s, color.STRING)
+        end
+
+        _insert(ctx, s)
+    end
 
     -- compact not need process, ouput with one-line.
     if self._compact == true then
         f_str = partten:format(str):gsub('\n', '\\n')
         f_str_len = #f_str
 
-        if self._color then
-            f_str = color.render(f_str, color.STRING)
-        end
-
-        _insert(context, f_str)
+        _color_insert(f_str)
         return true, f_str_len
     end
 
@@ -483,11 +487,7 @@ function PrettyPrinter:_p_string(str, indent, context, level)
         f_str = string.format('"%s"', str_list[1])
         f_str_len = #f_str
 
-        if self._color then
-            f_str = color.render(f_str, color.STRING)
-        end
-
-        _insert(context, f_str)
+        _color_insert(f_str)
         return true, f_str_len
     end
 
@@ -495,44 +495,34 @@ function PrettyPrinter:_p_string(str, indent, context, level)
     f_str = string.format('"%s\\n"', str_list[1])
     f_str_len = #f_str
 
-    if self._color then
-        f_str = color.render(f_str, color.STRING)
-    end
-    _insert(context, f_str)
+    _color_insert(f_str)
     for i = 2, #str_list - 1 do
-        _insert(context, '..\n')
-        _insert(context, string.rep(' ', indent))
+        _insert(ctx, '..\n')
+        _insert(ctx, string.rep(' ', indent))
 
         f_str = string.format('"%s\\n"', str_list[i])
         f_str_len = math.max(f_str_len, #f_str)
 
-        if self._color then
-            f_str = color.render(f_str, color.STRING)
-        end
-        _insert(context, f_str)
+        _color_insert(f_str)
     end
 
-    _insert(context, '..\n')
-    _insert(context, string.rep(' ', indent))
+    _insert(ctx, '..\n')
+    _insert(ctx, string.rep(' ', indent))
 
     f_str = string.format('"%s\\n"', str_list[#str_list])
     f_str_len = math.max(f_str_len, #f_str)
 
-    if self._color then
-        f_str = color.render(f_str, color.STRING)
-    end
-    _insert(context, f_str)
+    _color_insert(f_str)
 
     return true, f_str_len
 end
 
 ---@return boolean @isreadable
 ---@return integer @length of num
-function PrettyPrinter:_p_number(num, indent, context, level)
-    local f_num, f_num_len
-
+function PrettyPrinter:_p_number(num, _, ctx, _)
     local num_limit = self._number_limit
-    local isreadable = true
+
+    local f_num, f_num_len
 
     if self._scientific_notation == true and
         (num > num_limit or num < -num_limit) then
@@ -545,22 +535,22 @@ function PrettyPrinter:_p_number(num, indent, context, level)
 
     if self._color then
         f_num = color.render(f_num, color.NUMBER)
-        isreadable = false
     end
 
-    _insert(context, f_num)
-    return isreadable, f_num_len
+    _insert(ctx, f_num)
+    return true, f_num_len
 end
 
 ---@return boolean @isreadable
 ---@return integer @length of nil
-function PrettyPrinter:_p_nil(n, indent, context, level)
+function PrettyPrinter:_p_nil(n, _, ctx, _)
     local f_nil = tostring(n)
+
     if self._color then
         f_nil = color.render(f_nil, color.NIL)
     end
 
-    _insert(context, f_nil)
+    _insert(ctx, f_nil)
     return true, 3
 end
 
